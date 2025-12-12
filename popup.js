@@ -168,6 +168,18 @@ formAddTask.addEventListener('submit', (e) => {
 
   if (name && url && selector) {
     
+    // Helper to finish up
+    const finish = () => {
+      formAddTask.reset();
+      resetPreview();
+      editingTaskId = null;
+      switchView('settings');
+      // Use setTimeOut to ensure UI update logic doesn't block message sending
+      setTimeout(() => {
+          chrome.runtime.sendMessage({ action: 'TRIGGER_CHECK' });
+      }, 100);
+    };
+
     if (editingTaskId) {
       // --- Update Existing Task ---
       const oldTaskIndex = tasks.findIndex(t => t.id === editingTaskId);
@@ -190,7 +202,11 @@ formAddTask.addEventListener('submit', (e) => {
         
         const newTasks = [...tasks];
         newTasks[oldTaskIndex] = updatedTask;
-        chrome.storage.local.set({ tasks: newTasks });
+        
+        // Wait for storage set to complete before triggering check
+        chrome.storage.local.set({ tasks: newTasks }, finish);
+      } else {
+        finish();
       }
     } else {
       // --- Create New Task ---
@@ -205,16 +221,10 @@ formAddTask.addEventListener('submit', (e) => {
       };
       
       const updatedTasks = [...tasks, newTask];
-      chrome.storage.local.set({ tasks: updatedTasks });
+      
+      // Wait for storage set to complete before triggering check
+      chrome.storage.local.set({ tasks: updatedTasks }, finish);
     }
-    
-    // Trigger check immediately so user sees feedback if it's a new or modified task
-    chrome.runtime.sendMessage({ action: 'TRIGGER_CHECK' });
-    
-    formAddTask.reset();
-    resetPreview();
-    editingTaskId = null;
-    switchView('settings');
   }
 });
 
@@ -301,10 +311,15 @@ function renderDashboard() {
     const link = div.querySelector('.link-title');
     
     const handleRead = () => {
-      item.isRead = true;
-      chrome.storage.local.set({ announcements });
-      // Update badge immediately for responsiveness
-      const count = announcements.filter(a => !a.isRead).length;
+      // Refresh data reference before modifying to ensure no stale closure
+      const currentAnnouncements = announcements.map(a => 
+        a.id === item.id ? { ...a, isRead: true } : a
+      );
+      
+      chrome.storage.local.set({ announcements: currentAnnouncements });
+      
+      // Update badge immediately
+      const count = currentAnnouncements.filter(a => !a.isRead).length;
       if (count === 0) chrome.action.setBadgeText({ text: '' });
     };
 
