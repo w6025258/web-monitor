@@ -2,45 +2,55 @@
 const ALARM_NAME = 'monitor_check';
 const OFFSCREEN_DOCUMENT_PATH = 'offscreen.html';
 
+console.log("[Web Monitor] Service Worker Initializing...");
+
 // 1. Initialize Alarms
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === ALARM_NAME) {
+    console.log("[Web Monitor] Alarm triggered");
     await checkAllTasks();
   }
 });
 
 // Setup default alarm on install
 chrome.runtime.onInstalled.addListener(() => {
+  console.log("[Web Monitor] Extension Installed");
   chrome.alarms.create(ALARM_NAME, { periodInMinutes: 60 });
 });
 
 // 2. Offscreen Document Management
-async function setupOffscreenDocument(path) {
-  // Check if offscreen document already exists
-  const existingContexts = await chrome.runtime.getContexts({
-    contextTypes: [chrome.runtime.ContextType.OFFSCREEN_DOCUMENT],
-    documentUrls: [chrome.runtime.getURL(path)],
-  });
+let creatingOffscreen; // Global promise to prevent race conditions
 
-  if (existingContexts.length > 0) {
-    return;
+async function setupOffscreenDocument(path) {
+  // Check existence (Modern API)
+  if (chrome.runtime.getContexts) {
+    const contexts = await chrome.runtime.getContexts({
+      contextTypes: ['OFFSCREEN_DOCUMENT'],
+      documentUrls: [chrome.runtime.getURL(path)]
+    });
+    if (contexts.length > 0) return;
   }
 
-  // Create offscreen document
-  if (chrome.offscreen) {
-    await chrome.offscreen.createDocument({
+  // Create if not exists (with concurrency lock)
+  if (creatingOffscreen) {
+    await creatingOffscreen;
+  } else {
+    creatingOffscreen = chrome.offscreen.createDocument({
       url: path,
-      reasons: [chrome.offscreen.Reason.DOM_PARSER],
+      reasons: ['DOM_PARSER'],
       justification: 'Parse HTML to detect website updates',
     });
-  } else {
-    console.error('Offscreen API not available.');
-  }
-}
-
-async function closeOffscreenDocument() {
-  if (chrome.offscreen) {
-    await chrome.offscreen.closeDocument();
+    
+    try {
+      await creatingOffscreen;
+    } catch (err) {
+      // Ignore error if it says it already exists
+      if (!err.message.startsWith('Only a single offscreen')) {
+         console.error("[Web Monitor] Offscreen creation failed", err);
+      }
+    } finally {
+      creatingOffscreen = null;
+    }
   }
 }
 
@@ -72,14 +82,15 @@ async function checkAllTasks() {
             payload: { html, selector: task.selector, url: task.url },
           });
 
+          if (!parseResult) throw new Error("Parsing failed (no result)");
+
           // C. Compare Content
-          const currentContent = parseResult.text.trim();
+          const currentContent = parseResult.text ? parseResult.text.trim() : '';
           const contentHash = await generateHash(currentContent);
 
           if (currentContent && task.lastContentHash !== contentHash) {
             // New Content Found
             if (task.lastContentHash !== '') {
-              // Only create announcement if it's not the first run (empty hash)
               const newAnnouncement = {
                 id: crypto.randomUUID(),
                 taskId: task.id,
@@ -103,12 +114,12 @@ async function checkAllTasks() {
             errorMessage: undefined,
           };
         } catch (error) {
-          console.error(`Error checking ${task.name}:`, error);
+          console.error(`[Web Monitor] Error checking ${task.name}:`, error);
           return {
             ...task,
             lastChecked: Date.now(),
             status: 'error',
-            errorMessage: error instanceof Error ? error.message : 'Unknown error',
+            errorMessage: error.message || 'Unknown error',
           };
         }
       })
@@ -127,7 +138,7 @@ async function checkAllTasks() {
     }
 
   } catch (err) {
-    console.error('Global check failed', err);
+    console.error('[Web Monitor] Global check failed', err);
     await chrome.storage.local.set({ isChecking: false });
   } 
 }

@@ -2,11 +2,17 @@
 // Listen for messages from the background script
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'PARSE_HTML') {
-    const { html, selector, url } = msg.payload;
-    const result = parseHTML(html, selector, url);
-    sendResponse(result);
+    try {
+      const { html, selector, url } = msg.payload;
+      const result = parseHTML(html, selector, url);
+      sendResponse(result);
+    } catch (e) {
+      console.error("[Offscreen] Parse error", e);
+      sendResponse({ text: '', error: e.toString() });
+    }
   }
-  // Return true if we needed to do async work, but parsing is synchronous here
+  // Synchronous response usually, but return true just in case we go async later
+  return false; 
 });
 
 function parseHTML(htmlString, selector, baseUrl) {
