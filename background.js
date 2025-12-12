@@ -16,11 +16,16 @@ chrome.runtime.onInstalled.addListener(async () => {
   console.log("[Web Monitor] ✅ 插件已安装，系统就绪。");
   
   // Load interval from storage or default to 60
+  // Handle '0' specifically to allow disabling
   const data = await chrome.storage.local.get('checkInterval');
-  const interval = parseInt(data.checkInterval) || 60;
+  const interval = data.checkInterval !== undefined ? parseInt(data.checkInterval) : 60;
   
-  console.log(`[Web Monitor] 设置初始检查频率: ${interval} 分钟`);
-  chrome.alarms.create(ALARM_NAME, { periodInMinutes: interval });
+  if (interval > 0) {
+    console.log(`[Web Monitor] 设置初始检查频率: ${interval} 分钟`);
+    chrome.alarms.create(ALARM_NAME, { periodInMinutes: interval });
+  } else {
+    console.log(`[Web Monitor] 初始检查频率为 0 (关闭)`);
+  }
   
   // Initial check
   await checkAllTasks();
@@ -29,12 +34,19 @@ chrome.runtime.onInstalled.addListener(async () => {
 // Watch for interval changes
 chrome.storage.onChanged.addListener(async (changes) => {
   if (changes.checkInterval) {
-    const newInterval = parseInt(changes.checkInterval.newValue) || 60;
+    const newVal = changes.checkInterval.newValue;
+    const newInterval = (newVal !== undefined) ? parseInt(newVal) : 60;
+    
     console.log(`[Web Monitor] ⏱️ 更新检查频率: ${newInterval} 分钟`);
     
     // Reset alarm
     await chrome.alarms.clear(ALARM_NAME);
-    chrome.alarms.create(ALARM_NAME, { periodInMinutes: newInterval });
+    
+    if (newInterval > 0) {
+      chrome.alarms.create(ALARM_NAME, { periodInMinutes: newInterval });
+    } else {
+      console.log(`[Web Monitor] 自动检查已关闭`);
+    }
   }
 });
 

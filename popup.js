@@ -56,7 +56,9 @@ function loadData() {
     
     // Set Interval Selector
     if (selectInterval) {
-      selectInterval.value = result.checkInterval || 60;
+      // Use !== undefined check because '0' is falsy but valid
+      const currentInterval = result.checkInterval !== undefined ? result.checkInterval : 60;
+      selectInterval.value = currentInterval;
     }
 
     render();
@@ -67,7 +69,11 @@ function loadData() {
     if (changes.tasks) tasks = changes.tasks.newValue || [];
     if (changes.announcements) announcements = changes.announcements.newValue || [];
     if (changes.isChecking) isChecking = changes.isChecking.newValue || false;
-    if (changes.checkInterval && selectInterval) selectInterval.value = changes.checkInterval.newValue || 60;
+    if (changes.checkInterval && selectInterval) {
+       // Handle 0 value update correctly
+       const newVal = changes.checkInterval.newValue;
+       selectInterval.value = (newVal !== undefined) ? newVal : 60;
+    }
     render();
   });
 }
