@@ -1,17 +1,20 @@
 
-// popup.js - Pure JS
+// popup.js - Pure JS Interface (Chinese Version)
 
 // State
 let tasks = [];
 let announcements = [];
 let isChecking = false;
+let editingTaskId = null; // Track if we are editing an existing task
 
-// Elements
+// DOM Elements
 const views = {
   dashboard: document.getElementById('view-dashboard'),
   settings: document.getElementById('view-settings'),
   addTask: document.getElementById('view-add-task'),
 };
+
+const viewAddTaskTitle = document.getElementById('view-add-task-title');
 
 const btnCheckNow = document.getElementById('btn-check-now');
 const btnSettings = document.getElementById('btn-settings');
@@ -22,9 +25,12 @@ const formAddTask = document.getElementById('form-add-task');
 
 const listAnnouncements = document.getElementById('announcements-list');
 const listTasks = document.getElementById('tasks-list');
+const statMonitored = document.getElementById('stat-monitored');
+const statUnread = document.getElementById('stat-unread');
 
-// Init
+// --- Init ---
 document.addEventListener('DOMContentLoaded', () => {
+  console.log("Popup Loaded");
   loadData();
 });
 
@@ -36,6 +42,7 @@ function loadData() {
     render();
   });
 
+  // Real-time updates from background
   chrome.storage.onChanged.addListener((changes) => {
     if (changes.tasks) tasks = changes.tasks.newValue || [];
     if (changes.announcements) announcements = changes.announcements.newValue || [];
@@ -44,7 +51,9 @@ function loadData() {
   });
 }
 
-// Actions
+// --- Actions ---
+
+// Toggle Settings View
 btnSettings.addEventListener('click', () => {
   if (views.settings.classList.contains('active')) {
     switchView('dashboard');
@@ -53,21 +62,37 @@ btnSettings.addEventListener('click', () => {
   }
 });
 
-btnAddTaskView.addEventListener('click', () => switchView('addTask'));
-btnCancelAdd.addEventListener('click', () => switchView('settings'));
-
-btnCheckNow.addEventListener('click', () => {
-  if (isChecking) return;
-  triggerBackgroundCheck();
+// Navigation
+btnAddTaskView.addEventListener('click', () => {
+  editingTaskId = null; // Reset edit mode
+  formAddTask.reset();
+  viewAddTaskTitle.textContent = "添加新监控";
+  switchView('addTask');
 });
 
+btnCancelAdd.addEventListener('click', () => {
+  editingTaskId = null;
+  formAddTask.reset();
+  switchView('settings');
+});
+
+// Manual Check
+btnCheckNow.addEventListener('click', () => {
+  if (isChecking) return;
+  btnCheckNow.classList.add('spin');
+  // Send message to background
+  chrome.runtime.sendMessage({ action: 'TRIGGER_CHECK' });
+});
+
+// Clear History
 btnClearAll.addEventListener('click', () => {
-  if (confirm('Clear all history?')) {
+  if (confirm('确定要清空所有更新记录吗？')) {
     chrome.storage.local.set({ announcements: [] });
     chrome.action.setBadgeText({ text: '' });
   }
 });
 
+// Add/Edit Task Submit
 formAddTask.addEventListener('submit', (e) => {
   e.preventDefault();
   const name = document.getElementById('input-name').value.trim();
@@ -75,34 +100,58 @@ formAddTask.addEventListener('submit', (e) => {
   const selector = document.getElementById('input-selector').value.trim();
 
   if (name && url && selector) {
-    const newTask = {
-      id: crypto.randomUUID(),
-      name,
-      url,
-      selector,
-      lastChecked: 0,
-      lastContentHash: '', 
-      status: 'active'
-    };
     
-    // Optimistic UI
-    const updatedTasks = [...tasks, newTask];
-    chrome.storage.local.set({ tasks: updatedTasks }, () => {
-      // Trigger check immediately so user sees log in background
-      triggerBackgroundCheck();
-    });
+    if (editingTaskId) {
+      // --- Update Existing Task ---
+      const oldTaskIndex = tasks.findIndex(t => t.id === editingTaskId);
+      if (oldTaskIndex > -1) {
+        const oldTask = tasks[oldTaskIndex];
+        
+        // Check if critical fields changed to reset hash
+        const isCriticalChange = oldTask.url !== url || oldTask.selector !== selector;
+        
+        const updatedTask = {
+          ...oldTask,
+          name,
+          url,
+          selector,
+          // If URL or Selector changed, reset hash so we get a fresh baseline next check
+          lastContentHash: isCriticalChange ? '' : oldTask.lastContentHash,
+          status: 'active', // Reset error status on edit
+          errorMessage: undefined
+        };
+        
+        const newTasks = [...tasks];
+        newTasks[oldTaskIndex] = updatedTask;
+        chrome.storage.local.set({ tasks: newTasks });
+      }
+    } else {
+      // --- Create New Task ---
+      const newTask = {
+        id: Date.now().toString(36) + Math.random().toString(36).substr(2),
+        name,
+        url,
+        selector,
+        lastChecked: 0,
+        lastContentHash: '', // Empty means first run establishes baseline
+        status: 'active'
+      };
+      
+      const updatedTasks = [...tasks, newTask];
+      chrome.storage.local.set({ tasks: updatedTasks });
+    }
+    
+    // Trigger check immediately so user sees feedback if it's a new or modified task
+    chrome.runtime.sendMessage({ action: 'TRIGGER_CHECK' });
     
     formAddTask.reset();
+    editingTaskId = null;
     switchView('settings');
   }
 });
 
-function triggerBackgroundCheck() {
-  btnCheckNow.classList.add('spin');
-  chrome.runtime.sendMessage({ action: 'TRIGGER_CHECK' });
-}
+// --- Rendering ---
 
-// Rendering
 function switchView(name) {
   Object.values(views).forEach(el => el.classList.remove('active'));
   views[name].classList.add('active');
@@ -115,51 +164,53 @@ function switchView(name) {
 }
 
 function render() {
-  // Update Check Button
+  // 1. Update Spinner
   if (isChecking) {
     btnCheckNow.classList.add('spin');
   } else {
     btnCheckNow.classList.remove('spin');
   }
 
-  // Stats
-  document.getElementById('stat-monitored').textContent = `Monitored: ${tasks.length}`;
+  // 2. Update Stats
+  statMonitored.textContent = `已监控: ${tasks.length}`;
   const unreadCount = announcements.filter(a => !a.isRead).length;
-  document.getElementById('stat-unread').textContent = `Unread: ${unreadCount}`;
+  statUnread.textContent = `未读: ${unreadCount}`;
 
-  // Dashboard
+  // 3. Render Dashboard
   renderDashboard();
 
-  // Settings
+  // 4. Render Settings
   renderSettings();
 }
 
 function renderDashboard() {
-  const container = listAnnouncements;
-  container.innerHTML = '';
+  listAnnouncements.innerHTML = '';
   
   const emptyDash = document.getElementById('empty-state-dashboard');
   const emptyTasks = document.getElementById('empty-state-no-tasks');
 
+  // Case: No tasks configured
   if (tasks.length === 0) {
     emptyTasks.classList.remove('hidden');
     emptyDash.classList.add('hidden');
-    container.classList.add('hidden');
+    listAnnouncements.classList.add('hidden');
     btnClearAll.classList.add('hidden');
     return;
   }
   
   emptyTasks.classList.add('hidden');
   
+  // Case: No updates found yet
   if (announcements.length === 0) {
     emptyDash.classList.remove('hidden');
-    container.classList.add('hidden');
+    listAnnouncements.classList.add('hidden');
     btnClearAll.classList.add('hidden');
     return;
   }
 
+  // Case: Updates exist
   emptyDash.classList.add('hidden');
-  container.classList.remove('hidden');
+  listAnnouncements.classList.remove('hidden');
   btnClearAll.classList.remove('hidden');
 
   announcements.forEach(item => {
@@ -170,19 +221,21 @@ function renderDashboard() {
     
     div.innerHTML = `
       <div class="meta">
-        <span class="task-tag">${escape(item.taskName)}</span>
+        <span class="task-tag">${escapeHtml(item.taskName)}</span>
         <span>${time}</span>
       </div>
-      <a href="${item.link}" target="_blank" class="link-title">${escape(item.title)}</a>
-      ${!item.isRead ? `<div style="text-align:right;"><button class="btn-action">Mark Read</button></div>` : ''}
+      <a href="${item.link}" target="_blank" class="link-title">${escapeHtml(item.title)}</a>
+      ${!item.isRead ? `<div style="text-align:right;"><button class="btn-action">标记为已读</button></div>` : ''}
     `;
 
+    // Event Handlers
     const btn = div.querySelector('.btn-action');
     const link = div.querySelector('.link-title');
     
     const handleRead = () => {
       item.isRead = true;
       chrome.storage.local.set({ announcements });
+      // Update badge immediately for responsiveness
       const count = announcements.filter(a => !a.isRead).length;
       if (count === 0) chrome.action.setBadgeText({ text: '' });
     };
@@ -190,56 +243,87 @@ function renderDashboard() {
     if(btn) btn.onclick = handleRead;
     link.onclick = handleRead;
 
-    container.appendChild(div);
+    listAnnouncements.appendChild(div);
   });
 }
 
 function renderSettings() {
-  const container = listTasks;
-  container.innerHTML = '';
+  listTasks.innerHTML = '';
   const empty = document.getElementById('empty-state-settings');
 
   if (tasks.length === 0) {
     empty.classList.remove('hidden');
-    container.classList.add('hidden');
+    listTasks.classList.add('hidden');
     return;
   }
 
   empty.classList.add('hidden');
-  container.classList.remove('hidden');
+  listTasks.classList.remove('hidden');
 
   tasks.forEach(task => {
     const div = document.createElement('div');
     div.className = 'card task-item';
     
-    let statusHtml = '<span class="text-green">●</span>';
+    let statusHtml = '<span class="text-green">● 正常</span>';
     if (task.status === 'error') {
-      statusHtml = `<span class="text-red" title="${escape(task.errorMessage)}">● Error</span>`;
+      statusHtml = `<span class="text-red" title="${escapeHtml(task.errorMessage)}">● 错误</span>`;
     }
 
     div.innerHTML = `
       <div class="task-info">
-        <div class="task-name">${escape(task.name)} ${statusHtml}</div>
-        <div class="task-url">${escape(task.url)}</div>
-        <div style="margin-top:4px;"><span class="task-selector">${escape(task.selector)}</span></div>
+        <div class="task-name">${escapeHtml(task.name)}</div>
+        <div class="task-url" title="${escapeHtml(task.url)}">${escapeHtml(task.url)}</div>
+        <div style="margin-top:4px; display:flex; justify-content:space-between; align-items:center;">
+           <span class="task-selector">${escapeHtml(task.selector)}</span>
+           <span style="font-size:10px;">${statusHtml}</span>
+        </div>
       </div>
-      <button class="icon-btn delete-btn" title="Delete">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-      </button>
+      <div class="action-group">
+        <button class="task-btn edit-btn" title="编辑">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+        </button>
+        <button class="task-btn delete-btn" title="删除">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+        </button>
+      </div>
     `;
 
+    // Delete Action
     div.querySelector('.delete-btn').onclick = () => {
-      if(confirm('Delete this task?')) {
+      if(confirm(`确定要删除监控 "${task.name}" 吗？`)) {
         const newTasks = tasks.filter(t => t.id !== task.id);
         chrome.storage.local.set({ tasks: newTasks });
       }
     };
 
-    container.appendChild(div);
+    // Edit Action
+    div.querySelector('.edit-btn').onclick = () => {
+      startEditing(task);
+    };
+
+    listTasks.appendChild(div);
   });
 }
 
-function escape(str) {
+function startEditing(task) {
+  editingTaskId = task.id;
+  
+  // Pre-fill form
+  document.getElementById('input-name').value = task.name;
+  document.getElementById('input-url').value = task.url;
+  document.getElementById('input-selector').value = task.selector;
+  
+  // Change Title
+  viewAddTaskTitle.textContent = "编辑监控任务";
+  
+  switchView('addTask');
+}
+
+function escapeHtml(str) {
   if (!str) return '';
-  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+  return str.replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
 }
