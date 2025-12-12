@@ -20,7 +20,7 @@ chrome.runtime.onInstalled.addListener(async () => {
   await checkAllTasks();
 });
 
-// 2. Offscreen Document Management
+// 2. Offscreen Document Management (For Static Sites)
 let creatingOffscreen; 
 
 async function setupOffscreenDocument(path) {
@@ -61,7 +61,8 @@ async function sendMessageToOffscreen(message) {
   return new Promise((resolve) => {
     chrome.runtime.sendMessage(message, (response) => {
       if (chrome.runtime.lastError) {
-        resolve({ error: chrome.runtime.lastError.message });
+        // If offscreen fails, we resolve with null text so we can try fallback
+        resolve({ text: '', error: chrome.runtime.lastError.message });
       } else {
         resolve(response);
       }
@@ -69,7 +70,76 @@ async function sendMessageToOffscreen(message) {
   });
 }
 
-// 3. Core Logic
+// 3. Dynamic Scraping Logic (For JS Sites)
+async function scrapeDynamicContent(url, selector) {
+  console.log(`[Web Monitor] 🚀 启动动态渲染抓取: ${url}`);
+  
+  let windowId = null;
+
+  try {
+    // Create a minimized window to load the page
+    const win = await chrome.windows.create({
+      url: url,
+      state: 'minimized', // Minimize to be less intrusive
+      focused: false,
+      type: 'popup'
+    });
+    windowId = win.id;
+
+    // Wait for the tab to complete loading
+    const tabId = win.tabs[0].id;
+    await new Promise((resolve, reject) => {
+      const listener = (tid, changeInfo) => {
+        if (tid === tabId && changeInfo.status === 'complete') {
+          chrome.tabs.onUpdated.removeListener(listener);
+          // Give an extra 2 seconds for JS frameworks (React/Vue) to hydrate DOM
+          setTimeout(resolve, 2000); 
+        }
+      };
+      chrome.tabs.onUpdated.addListener(listener);
+      // Timeout fallback in case onload hangs
+      setTimeout(() => {
+        chrome.tabs.onUpdated.removeListener(listener);
+        resolve(); // Try scraping anyway after 15s
+      }, 15000);
+    });
+
+    // Inject script to extract content
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: tabId },
+      func: (sel) => {
+        const el = document.querySelector(sel);
+        if (!el) return { text: '', href: undefined, title: document.title };
+        
+        let href = undefined;
+        if (el.tagName === 'A') href = el.href;
+        else if (el.querySelector('a')) href = el.querySelector('a').href;
+
+        return {
+          text: (el.textContent || '').trim().replace(/\s+/g, ' '),
+          href: href,
+          title: document.title
+        };
+      },
+      args: [selector]
+    });
+
+    if (windowId) await chrome.windows.remove(windowId);
+    
+    if (results && results[0] && results[0].result) {
+      return results[0].result;
+    }
+    return { text: '', error: 'Script injection failed' };
+
+  } catch (err) {
+    if (windowId) try { await chrome.windows.remove(windowId); } catch(e){}
+    console.error("[Web Monitor] Dynamic scrape failed:", err);
+    return { text: '', error: err.message };
+  }
+}
+
+
+// 4. Core Logic
 async function checkAllTasks() {
   await chrome.storage.local.set({ isChecking: true });
   
@@ -89,25 +159,33 @@ async function checkAllTasks() {
 
     const updatedTasks = await Promise.all(tasks.map(async (task) => {
       try {
-        console.log(`[Web Monitor] 抓取中: ${task.url}`);
+        console.log(`[Web Monitor] 尝试抓取: ${task.url}`);
         
-        const result = await sendMessageToOffscreen({
+        // Strategy 1: Try Fast Static Fetch (Offscreen) first
+        let result = await sendMessageToOffscreen({
           type: 'SCRAPE_URL',
           payload: { url: task.url, selector: task.selector }
         });
 
-        if (result.error) throw new Error(result.error);
-
-        const currentContent = result.text || '';
-        
-        // Debugging Aid: If content is empty, log the page title
-        if (!currentContent) {
-           console.warn(`[Web Monitor] ⚠️ 警告: 未找到内容 "${task.name}"`);
-           console.warn(`   └─ 目标页面标题: "${result.pageTitle}" (如果标题是 Login/Forbidden，说明被拦截)`);
-           console.warn(`   └─ 当前选择器: ${task.selector}`);
-           console.warn(`   └─ 建议: 右键网页 -> "查看网页源代码"，确认该元素是否存在于原始 HTML 中，并简化选择器。`);
+        // Strategy 2: If Static failed (empty text), try Dynamic (Window)
+        if (!result.text) {
+           console.log(`[Web Monitor] ⚠️ 静态抓取为空，尝试动态渲染模式... (${task.name})`);
+           const dynamicResult = await scrapeDynamicContent(task.url, task.selector);
+           
+           // If dynamic found something, use it
+           if (dynamicResult.text) {
+             result = dynamicResult;
+             console.log(`[Web Monitor] ✅ 动态抓取成功!`);
+           } else {
+             // Both failed
+             console.warn(`[Web Monitor] ❌ 动态抓取也未找到内容。可能选择器错误。`);
+             result.pageTitle = dynamicResult.title || result.pageTitle;
+           }
         }
 
+        if (result.error && !result.text) throw new Error(result.error);
+
+        const currentContent = result.text || '';
         const contentHash = await generateHash(currentContent);
         
         const isFirstRun = task.lastContentHash === '';
@@ -176,18 +254,33 @@ async function generateHash(str) {
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.action === 'TRIGGER_CHECK') {
-    console.log("[Web Monitor] 👆 收到手动触发检查请求");
     checkAllTasks().then(() => sendResponse({ status: 'done' }));
     return true; 
   }
   
-  // NEW: Handle ad-hoc test scraping from popup
   if (msg.action === 'TEST_SCRAPE') {
     console.log("[Web Monitor] 🧪 测试抓取:", msg.payload.url);
-    sendMessageToOffscreen({
-      type: 'SCRAPE_URL',
-      payload: msg.payload
-    }).then(result => sendResponse(result));
-    return true; // async response
+    
+    // Test uses the same fallback logic
+    (async () => {
+      // 1. Try Static
+      let result = await sendMessageToOffscreen({
+        type: 'SCRAPE_URL',
+        payload: msg.payload
+      });
+      
+      // 2. Try Dynamic if Static fails
+      if (!result.text) {
+        // Notify user via console or just wait
+        const dynamicResult = await scrapeDynamicContent(msg.payload.url, msg.payload.selector);
+        if (dynamicResult.text || dynamicResult.error) {
+           result = dynamicResult;
+        }
+      }
+      
+      sendResponse(result);
+    })();
+    
+    return true; 
   }
 });
