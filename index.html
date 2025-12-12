@@ -19,9 +19,8 @@
     * { box-sizing: border-box; }
 
     body {
-      /* Modified: Adaptive width to fit the grid content, with a safe min-width */
-      width: fit-content;
-      min-width: 800px; 
+      /* Modified: Fixed width 1000px as requested */
+      width: 1000px;
       height: 600px;
       margin: 0;
       font-family: "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -86,17 +85,15 @@
     /* --- Dashboard Grid Layout --- */
     #announcements-list {
       display: grid;
-      /* Modified: Fixed 5 columns, 200px width each */
-      grid-template-columns: repeat(5, 200px);
+      /* Modified: Use 1fr to fit 5 columns within the 1000px body width */
+      grid-template-columns: repeat(5, 1fr);
       gap: 10px;
-      /* Ensure container doesn't collapse if body is constrained */
-      min-width: 1040px; 
     }
 
     .announcement-item { 
       border-top: 3px solid transparent; 
       border-left: 1px solid var(--border);
-      /* Modified: Fixed height 400px */
+      /* Fixed height 400px */
       height: 400px;
       display: flex;
       flex-direction: column;
@@ -130,7 +127,7 @@
     /* Ensure images in grid don't break layout */
     .html-content img { 
       width: 100%; 
-      height: 120px; /* Increased image height slightly for taller card */
+      height: 120px; 
       object-fit: cover; 
       border-radius: 4px; 
       margin-bottom: 4px;
