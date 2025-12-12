@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>网页更新监控</title>
+  <title>平台公告</title>
   <style>
     :root {
       --primary: #4f46e5;
@@ -85,20 +85,23 @@
     .announcement-item.unread { border-left-color: var(--primary); background-color: #ffffff; }
     .announcement-item.read { opacity: 0.7; background-color: #f8fafc; }
 
-    .meta { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
+    .meta { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); margin-bottom: 6px; border-bottom: 1px solid #f1f5f9; padding-bottom: 4px; }
     .task-tag { background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-weight: 500; }
     
-    .link-title { 
-      display: block; 
-      font-size: 14px; 
-      font-weight: 500; 
-      color: var(--primary); 
-      text-decoration: none; 
-      margin-bottom: 8px;
-      line-height: 1.4;
+    /* HTML Content Styling within Announcements */
+    .html-content {
+      font-size: 13px;
+      color: var(--text);
+      line-height: 1.5;
     }
-    .link-title:hover { text-decoration: underline; }
-
+    .html-content a { color: var(--primary); text-decoration: none; }
+    .html-content a:hover { text-decoration: underline; }
+    .html-content ul, .html-content ol { margin: 4px 0 4px 20px; padding: 0; }
+    .html-content li { margin-bottom: 4px; }
+    .html-content p { margin: 0 0 8px 0; }
+    .html-content img { max-width: 100%; height: auto; border-radius: 4px; }
+    .html-content h1, .html-content h2, .html-content h3 { font-size: 14px; font-weight: 700; margin: 8px 0 4px 0; }
+    
     .btn-action {
       font-size: 10px;
       text-transform: uppercase;
@@ -226,8 +229,11 @@
 
   <header>
     <h1>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px;"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
-      网页更新监控
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px;">
+        <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path>
+        <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path>
+      </svg>
+      平台公告
     </h1>
     <div style="display:flex; gap:4px;">
       <button id="btn-check-now" class="icon-btn" title="立即检查">

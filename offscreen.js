@@ -50,13 +50,54 @@ async function scrapeAndParse(url, selector) {
     const element = doc.querySelector(selector);
     
     if (!element) {
-      return { text: '', href: undefined, pageTitle };
+      return { text: '', html: '', href: undefined, pageTitle };
     }
 
-    // --- ENHANCED TEXT EXTRACTION ---
-    const text = formatElementText(element);
+    // --- HTML PRE-PROCESSING ---
+    // 1. Resolve Relative URLs to Absolute URLs
+    // We modify the DOM element directly before extracting innerHTML
+    const base = new URL(url);
+
+    element.querySelectorAll('a').forEach(a => {
+      try {
+        if (a.getAttribute('href')) {
+          a.href = new URL(a.getAttribute('href'), base).href;
+          a.target = "_blank"; // Force open in new tab
+        }
+      } catch(e) {}
+    });
+
+    element.querySelectorAll('img').forEach(img => {
+      try {
+        if (img.getAttribute('src')) {
+          img.src = new URL(img.getAttribute('src'), base).href;
+          img.style.maxWidth = '100%'; // Prevent overflow
+        }
+      } catch(e) {}
+    });
+
+    // 2. Remove dangerous or noisy tags
+    element.querySelectorAll('script, style, iframe, frame, object, embed, form, button, input').forEach(el => el.remove());
     
-    // Extract Link if available
+    // 3. Remove inline event handlers (security) and classes (style isolation)
+    const allElements = element.querySelectorAll('*');
+    allElements.forEach(el => {
+      const attrs = el.attributes;
+      for (let i = attrs.length - 1; i >= 0; i--) {
+        const name = attrs[i].name;
+        if (name.startsWith('on') || name === 'class' || name === 'id') {
+          el.removeAttribute(name);
+        }
+      }
+    });
+
+    // Get Cleaned HTML
+    let cleanHtml = element.innerHTML.trim();
+    
+    // Also get text for summary/hash purposes
+    const cleanText = element.textContent.trim().replace(/\s+/g, ' ');
+
+    // Extract Link if available (Primary link for the card header)
     let href = undefined;
     if (element.tagName === 'A') {
       href = element.getAttribute('href') || undefined;
@@ -67,16 +108,7 @@ async function scrapeAndParse(url, selector) {
       }
     }
 
-    // Resolve relative URLs
-    if (href) {
-      try {
-        href = new URL(href, url).href;
-      } catch (e) {
-        // Keep original if resolution fails
-      }
-    }
-
-    return { text, href, pageTitle };
+    return { text: cleanText, html: cleanHtml, href, pageTitle };
 
   } catch (error) {
     if (error.name === 'AbortError') {
@@ -85,54 +117,4 @@ async function scrapeAndParse(url, selector) {
     console.error(`[Offscreen] Fetch failed for ${url}:`, error);
     throw new Error(error.message || 'Network/CORS Error');
   }
-}
-
-/**
- * Formats DOM element text to be human-readable.
- * Preserves newlines for block elements, removes scripts, normalizes whitespace.
- */
-function formatElementText(element) {
-  if (!element) return '';
-  
-  // 1. Clone node to avoid modifying the parsed document structure (if we needed it later)
-  const clone = element.cloneNode(true);
-
-  // 2. Remove noise tags
-  const junkTags = clone.querySelectorAll('script, style, noscript, iframe, svg, img, video, audio');
-  junkTags.forEach(el => el.remove());
-
-  // 3. Replace <br> with newline
-  clone.querySelectorAll('br').forEach(br => br.replaceWith('\n'));
-
-  // 4. Inject newlines around block elements to ensure separation
-  //    DOMParser nodes are not rendered, so we manually simulate layout structure.
-  const blockTags = [
-    'DIV', 'P', 'LI', 'TR', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 
-    'ARTICLE', 'SECTION', 'HEADER', 'FOOTER', 'BLOCKQUOTE', 'PRE'
-  ];
-  
-  blockTags.forEach(tagName => {
-    const blocks = clone.querySelectorAll(tagName);
-    blocks.forEach(blk => {
-      // Prepend and append a newline text node
-      blk.before(document.createTextNode('\n'));
-      blk.after(document.createTextNode('\n'));
-    });
-  });
-
-  // 5. Get raw text content (now contains injected newlines)
-  let rawText = clone.textContent || '';
-
-  // 6. Clean up whitespace
-  // - Replace non-breaking spaces with normal spaces
-  // - Collapse multiple spaces/tabs into one space
-  // - Collapse multiple newlines into one newline
-  // - Trim edges
-  return rawText
-    .replace(/\u00A0/g, ' ') 
-    .replace(/[ \t]+/g, ' ')      // Collapse horizontal whitespace
-    .replace(/\n\s*/g, '\n')      // Collapse whitespace at start of line
-    .replace(/\s*\n/g, '\n')      // Collapse whitespace at end of line
-    .replace(/\n+/g, '\n')        // Collapse multiple empty lines
-    .trim();
 }

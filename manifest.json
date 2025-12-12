@@ -1,7 +1,7 @@
 
 {
   "manifest_version": 3,
-  "name": "Web Update Monitor",
+  "name": "平台公告",
   "version": "1.0.1",
   "description": "Monitor websites for updates and announcements automatically.",
   "permissions": [
@@ -19,7 +19,7 @@
   },
   "action": {
     "default_popup": "index.html",
-    "default_title": "Web Monitor"
+    "default_title": "平台公告"
   },
   "icons": {
     "16": "icon16.png",

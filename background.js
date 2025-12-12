@@ -61,8 +61,7 @@ async function sendMessageToOffscreen(message) {
   return new Promise((resolve) => {
     chrome.runtime.sendMessage(message, (response) => {
       if (chrome.runtime.lastError) {
-        // If offscreen fails, we resolve with null text so we can try fallback
-        resolve({ text: '', error: chrome.runtime.lastError.message });
+        resolve({ text: '', html: '', error: chrome.runtime.lastError.message });
       } else {
         resolve(response);
       }
@@ -77,60 +76,60 @@ async function scrapeDynamicContent(url, selector) {
   let windowId = null;
 
   try {
-    // Create a minimized window to load the page
     const win = await chrome.windows.create({
       url: url,
-      state: 'minimized', // Minimize to be less intrusive
+      state: 'minimized',
       focused: false,
       type: 'popup'
     });
     windowId = win.id;
 
-    // Wait for the tab to complete loading
     const tabId = win.tabs[0].id;
     await new Promise((resolve, reject) => {
       const listener = (tid, changeInfo) => {
         if (tid === tabId && changeInfo.status === 'complete') {
           chrome.tabs.onUpdated.removeListener(listener);
-          // Give an extra 2 seconds for JS frameworks (React/Vue) to hydrate DOM
           setTimeout(resolve, 2000); 
         }
       };
       chrome.tabs.onUpdated.addListener(listener);
-      // Timeout fallback in case onload hangs
       setTimeout(() => {
         chrome.tabs.onUpdated.removeListener(listener);
-        resolve(); // Try scraping anyway after 15s
+        resolve(); 
       }, 15000);
     });
 
-    // Inject script to extract content
     const results = await chrome.scripting.executeScript({
       target: { tabId: tabId },
       func: (sel) => {
         const el = document.querySelector(sel);
-        if (!el) return { text: '', href: undefined, title: document.title };
+        if (!el) return { text: '', html: '', href: undefined, title: document.title };
         
-        // Remove noise
-        const clone = el.cloneNode(true);
-        clone.querySelectorAll('script, style, noscript, svg, img').forEach(n => n.remove());
+        // --- Same HTML Processing Logic as Offscreen (Simplified for content script) ---
+        const base = new URL(document.location.href);
 
-        // Use innerText if available (it handles formatting nicely), fallback to textContent
+        el.querySelectorAll('a').forEach(a => { a.target = "_blank"; a.href = a.href; }); // .href access resolves absolute
+        el.querySelectorAll('img').forEach(img => { img.src = img.src; img.style.maxWidth = '100%'; });
+        el.querySelectorAll('script, style, iframe, button').forEach(n => n.remove());
+        
+        // Remove event handlers
+        el.querySelectorAll('*').forEach(e => {
+            const attrs = e.attributes;
+            for (let i = attrs.length - 1; i >= 0; i--) {
+                if (attrs[i].name.startsWith('on')) e.removeAttribute(attrs[i].name);
+            }
+        });
+
         let text = el.innerText || el.textContent || '';
+        let html = el.innerHTML.trim(); // Capture HTML
         
         let href = undefined;
         if (el.tagName === 'A') href = el.href;
         else if (el.querySelector('a')) href = el.querySelector('a').href;
 
-        // Clean up whitespace similar to offscreen
-        text = text
-            .replace(/[ \t]+/g, ' ')
-            .replace(/\n\s*\n/g, '\n')
-            .replace(/\n+/g, '\n')
-            .trim();
-
         return {
-          text: text,
+          text: text.trim(),
+          html: html,
           href: href,
           title: document.title
         };
@@ -143,12 +142,12 @@ async function scrapeDynamicContent(url, selector) {
     if (results && results[0] && results[0].result) {
       return results[0].result;
     }
-    return { text: '', error: 'Script injection failed' };
+    return { text: '', html: '', error: 'Script injection failed' };
 
   } catch (err) {
     if (windowId) try { await chrome.windows.remove(windowId); } catch(e){}
     console.error("[Web Monitor] Dynamic scrape failed:", err);
-    return { text: '', error: err.message };
+    return { text: '', html: '', error: err.message };
   }
 }
 
@@ -175,68 +174,58 @@ async function checkAllTasks() {
       try {
         console.log(`[Web Monitor] 尝试抓取: ${task.url}`);
         
-        // Strategy 1: Try Fast Static Fetch (Offscreen) first
+        // Strategy 1: Static
         let result = await sendMessageToOffscreen({
           type: 'SCRAPE_URL',
           payload: { url: task.url, selector: task.selector }
         });
 
-        // Strategy 2: If Static failed (empty text), try Dynamic (Window)
-        if (!result.text) {
+        // Strategy 2: Dynamic
+        if (!result.html) { // Check HTML emptiness
            console.log(`[Web Monitor] ⚠️ 静态抓取为空，尝试动态渲染模式... (${task.name})`);
            const dynamicResult = await scrapeDynamicContent(task.url, task.selector);
-           
-           // If dynamic found something, use it
-           if (dynamicResult.text) {
+           if (dynamicResult.html) {
              result = dynamicResult;
-             console.log(`[Web Monitor] ✅ 动态抓取成功!`);
-           } else {
-             // If dynamic also failed or returned empty
-             if (dynamicResult.error) {
-                 throw new Error(dynamicResult.error);
-             }
+           } else if (dynamicResult.error) {
+               throw new Error(dynamicResult.error);
            }
         }
 
-        // CRITICAL CHECK: If text is empty/null, treat as ERROR.
-        if (!result.text || result.text.trim().length === 0) {
-            throw new Error("未找到匹配内容 (Selector matched nothing)");
+        if (!result.html || result.html.length === 0) {
+            throw new Error("未找到匹配内容 (HTML Empty)");
         }
 
-        const currentContent = result.text;
-        const contentHash = await generateHash(currentContent);
+        // Use text content for hash generation to detect meaningful changes, 
+        // but store HTML for display.
+        const contentHash = await generateHash(result.text || result.html);
         
-        // --- 变更：移除哈希比对 ---
-        // 用户要求：不要做重复校验，每次抓取信息都显示最新数据。
-        // 之前的逻辑：const hasChanged = task.lastContentHash !== contentHash;
+        // 始终推送到“最新动态”列表 (Requested feature)
+        // Store HTML content in the 'title' field (or we could add a content field, but reusing title is easier for now)
+        // NOTE: We limit HTML length to 2000 chars to avoid storage quota issues, though local storage is 5MB.
+        const displayContent = result.html; 
         
-        console.log(`[Web Monitor] 🔄 抓取成功 (始终更新): ${task.name}`);
-        
-        // 始终推送到“最新动态”列表
         announcements.unshift({
           id: generateId(),
           taskId: task.id,
           taskName: task.name,
-          title: currentContent.substring(0, 100).replace(/\n/g, ' ') + (currentContent.length > 100 ? '...' : ''), 
+          title: displayContent, // We are storing HTML here now
           link: result.href || task.url,
           foundAt: Date.now(),
           isRead: false,
+          isHtml: true // Flag to tell UI to render as HTML
         });
         hasNewUpdates = true;
 
-        // SUCCESS
         return {
           ...task,
           lastChecked: Date.now(),
           lastContentHash: contentHash, 
-          lastResult: currentContent.substring(0, 100), // Preview can be longer now
+          lastResult: result.text.substring(0, 50) + "...", 
           status: 'active',
           errorMessage: undefined
         };
       } catch (e) {
         console.error(`[Web Monitor] ❌ 任务错误 ${task.name}:`, e.message);
-        
-        // FAILURE: Return task but DO NOT update lastContentHash
         return {
           ...task,
           lastChecked: Date.now(),
@@ -246,7 +235,7 @@ async function checkAllTasks() {
       }
     }));
 
-    // 限制历史记录数量，防止无限增长 (Keep last 50)
+    // Keep last 50
     if (announcements.length > 50) {
       announcements = announcements.slice(0, 50);
     }
@@ -283,26 +272,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   
   if (msg.action === 'TEST_SCRAPE') {
     console.log("[Web Monitor] 🧪 测试抓取:", msg.payload.url);
-    
-    // Test uses the same fallback logic
     (async () => {
-      // 1. Try Static
       let result = await sendMessageToOffscreen({
         type: 'SCRAPE_URL',
         payload: msg.payload
       });
-      
-      // 2. Try Dynamic if Static fails
-      if (!result.text) {
+      if (!result.html) {
         const dynamicResult = await scrapeDynamicContent(msg.payload.url, msg.payload.selector);
-        if (dynamicResult.text || dynamicResult.error) {
+        if (dynamicResult.html || dynamicResult.error) {
            result = dynamicResult;
         }
       }
-      
-      sendResponse(result);
+      // For test preview, we prefer text, but return HTML too
+      sendResponse({ ...result, text: result.text || "Found content but no text" }); 
     })();
-    
     return true; 
   }
 });

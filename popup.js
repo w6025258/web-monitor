@@ -138,12 +138,13 @@ btnTestSelector.addEventListener('click', async () => {
       previewResult.textContent = '抓取错误: ' + response.error;
       previewResult.style.color = '#ef4444';
       previewStatus.textContent = '❌ 失败';
-    } else if (!response.text) {
+    } else if (!response.html) {
       previewResult.innerHTML = `未找到匹配内容。<br><br>页面标题: <b>${escapeHtml(response.pageTitle)}</b><br>可能原因：<br>1. 选择器错误<br>2. 页面内容由 JS 动态生成（插件只能抓取原始 HTML）<br>3. 网站有反爬虫验证`;
       previewResult.style.color = '#f59e0b';
       previewStatus.textContent = '⚠️ 无结果';
     } else {
-      previewResult.textContent = response.text;
+      // Use text for simple preview check, or slice HTML if it's too long
+      previewResult.textContent = response.text || (response.html.substring(0, 300) + '...');
       previewResult.style.color = 'var(--text)';
       previewStatus.textContent = '✅ 成功匹配';
     }
@@ -388,34 +389,47 @@ function renderDashboard() {
     
     const time = new Date(item.foundAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
     
+    // Use HTML rendering instead of text
+    // Note: 'item.title' now actually contains the HTML string from background.js
     div.innerHTML = `
       <div class="meta">
         <span class="task-tag">${escapeHtml(item.taskName)}</span>
-        <span>${time}</span>
+        <div style="display:flex; gap:8px;">
+          <span>${time}</span>
+          ${!item.isRead ? `<button class="btn-action">已读</button>` : ''}
+        </div>
       </div>
-      <a href="${item.link}" target="_blank" class="link-title">${escapeHtml(item.title)}</a>
-      ${!item.isRead ? `<div style="text-align:right;"><button class="btn-action">标记为已读</button></div>` : ''}
+      <div class="html-content">
+        ${item.title} 
+      </div>
     `;
+    
+    // Note: We are relying on the backend (offscreen.js) to have stripped scripts
+    // But for extra safety in the popup context, we could run a pass here, 
+    // but innerHTML assignments in Extensions are generally safer than eval.
+    // However, clicking links inside the HTML needs to work.
 
     // Event Handlers
     const btn = div.querySelector('.btn-action');
-    const link = div.querySelector('.link-title');
     
     const handleRead = () => {
-      // Refresh data reference before modifying to ensure no stale closure
       const currentAnnouncements = announcements.map(a => 
         a.id === item.id ? { ...a, isRead: true } : a
       );
       
       chrome.storage.local.set({ announcements: currentAnnouncements });
-      
-      // Update badge immediately
       const count = currentAnnouncements.filter(a => !a.isRead).length;
       if (count === 0) chrome.action.setBadgeText({ text: '' });
     };
 
     if(btn) btn.onclick = handleRead;
-    link.onclick = handleRead;
+    
+    // Make main clicks (if it was a simple link) mark as read? 
+    // Since it's HTML content now, user might click links inside.
+    // Let's attach a listener to any link inside to mark as read
+    div.querySelectorAll('a').forEach(a => {
+        a.addEventListener('click', handleRead);
+    });
 
     listAnnouncements.appendChild(div);
   });
