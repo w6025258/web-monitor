@@ -177,24 +177,30 @@ async function checkAllTasks() {
              result = dynamicResult;
              console.log(`[Web Monitor] ✅ 动态抓取成功!`);
            } else {
-             // Both failed
-             console.warn(`[Web Monitor] ❌ 动态抓取也未找到内容。可能选择器错误。`);
-             result.pageTitle = dynamicResult.title || result.pageTitle;
+             // If dynamic also failed or returned empty
+             if (dynamicResult.error) {
+                 throw new Error(dynamicResult.error);
+             }
            }
         }
 
-        if (result.error && !result.text) throw new Error(result.error);
+        // CRITICAL CHECK: If text is empty/null, treat as ERROR.
+        // Do not let empty strings update the hash.
+        if (!result.text || result.text.trim().length === 0) {
+            throw new Error("未找到匹配内容 (Selector matched nothing)");
+        }
 
-        const currentContent = result.text || '';
+        const currentContent = result.text;
         const contentHash = await generateHash(currentContent);
         
-        // Check change (First run is also considered a change from "nothing")
-        const hasChanged = currentContent.length > 0 && task.lastContentHash !== contentHash;
+        // Check change 
+        // Note: We only compare against previous hash if we have a valid current content.
+        const hasChanged = task.lastContentHash !== contentHash;
         
         if (hasChanged) {
             console.log(`[Web Monitor] 🎉 发现新内容: ${task.name}`);
             
-            // Generate announcement even on first run
+            // Generate announcement
             announcements.unshift({
               id: generateId(),
               taskId: task.id,
@@ -207,16 +213,20 @@ async function checkAllTasks() {
             hasNewUpdates = true;
         }
 
+        // SUCCESS: Update everything including hash and lastResult
         return {
           ...task,
           lastChecked: Date.now(),
-          lastContentHash: currentContent.length > 0 ? contentHash : task.lastContentHash,
-          lastResult: currentContent.substring(0, 50),
+          lastContentHash: contentHash, // Only update hash on success
+          lastResult: currentContent.substring(0, 50), // Only update preview on success
           status: 'active',
           errorMessage: undefined
         };
       } catch (e) {
         console.error(`[Web Monitor] ❌ 任务错误 ${task.name}:`, e.message);
+        
+        // FAILURE: Return task but DO NOT update lastContentHash or lastResult
+        // This ensures the next successful check compares against the last known GOOD content.
         return {
           ...task,
           lastChecked: Date.now(),
@@ -269,7 +279,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       
       // 2. Try Dynamic if Static fails
       if (!result.text) {
-        // Notify user via console or just wait
         const dynamicResult = await scrapeDynamicContent(msg.payload.url, msg.payload.selector);
         if (dynamicResult.text || dynamicResult.error) {
            result = dynamicResult;
