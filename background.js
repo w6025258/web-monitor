@@ -78,14 +78,16 @@ async function checkAllTasks() {
     let hasNewUpdates = false;
 
     if (tasks.length === 0) {
-      console.log("[Web Monitor] No tasks.");
+      console.log("[Web Monitor] No tasks configured. Please add a task via the extension popup.");
       await chrome.storage.local.set({ isChecking: false });
       return;
     }
 
+    console.log(`[Web Monitor] Checking ${tasks.length} tasks...`);
+
     const updatedTasks = await Promise.all(tasks.map(async (task) => {
       try {
-        console.log(`Checking ${task.url}`);
+        console.log(`[Web Monitor] Fetching ${task.url}`);
         const result = await sendMessageToOffscreen({
           type: 'SCRAPE_URL',
           payload: { url: task.url, selector: task.selector }
@@ -96,13 +98,13 @@ async function checkAllTasks() {
         const currentContent = result.text || '';
         const contentHash = await generateHash(currentContent);
 
-        // Detect Change: Must have content, hash different from last, and not first run (unless you want first run alert)
-        // Here we silently update hash on first run so we don't alert everything as "new" immediately, 
-        // OR we can choose to alert. Let's alert only if it's an update.
+        // Detect Change: Must have content, hash different from last
+        // If lastContentHash is empty, it's the first run, so we just cache it without alerting.
         const isFirstRun = task.lastContentHash === '';
         
         if (currentContent && task.lastContentHash !== contentHash) {
           if (!isFirstRun) {
+            console.log(`[Web Monitor] Update found for: ${task.name}`);
             announcements.unshift({
               id: crypto.randomUUID(),
               taskId: task.id,
@@ -113,7 +115,11 @@ async function checkAllTasks() {
               isRead: false,
             });
             hasNewUpdates = true;
+          } else {
+            console.log(`[Web Monitor] Initial baseline set for: ${task.name}`);
           }
+        } else {
+          console.log(`[Web Monitor] No change for: ${task.name}`);
         }
 
         return {
@@ -121,10 +127,10 @@ async function checkAllTasks() {
           lastChecked: Date.now(),
           lastContentHash: contentHash,
           status: 'active',
-          errorMessage: undefined // Clear previous errors
+          errorMessage: undefined
         };
       } catch (e) {
-        console.error(`Error on ${task.name}:`, e);
+        console.error(`[Web Monitor] Error on ${task.name}:`, e);
         return {
           ...task,
           lastChecked: Date.now(),
@@ -142,7 +148,7 @@ async function checkAllTasks() {
     }
 
   } catch (err) {
-    console.error(err);
+    console.error('[Web Monitor] Global check failed', err);
     await chrome.storage.local.set({ isChecking: false });
   }
 }
@@ -155,6 +161,7 @@ async function generateHash(str) {
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.action === 'TRIGGER_CHECK') {
+    console.log("[Web Monitor] Manual check triggered");
     checkAllTasks().then(() => sendResponse({ status: 'done' }));
     return true; 
   }

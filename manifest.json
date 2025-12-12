@@ -1,7 +1,8 @@
+
 {
   "manifest_version": 3,
   "name": "Web Update Monitor",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Monitor websites for updates and announcements automatically.",
   "permissions": [
     "storage",

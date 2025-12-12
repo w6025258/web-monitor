@@ -1,26 +1,176 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Web Monitor</title>
-  <!-- Tailwind CSS via CDN for styling -->
-  <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    body {
-      width: 400px;
-      height: 600px;
-      overflow: hidden;
+    :root {
+      --primary: #4f46e5;
+      --primary-hover: #4338ca;
+      --bg: #f8fafc;
+      --surface: #ffffff;
+      --text: #0f172a;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
     }
-    /* Custom Scrollbar */
-    ::-webkit-scrollbar { width: 8px; }
-    ::-webkit-scrollbar-track { background: #f8fafc; }
-    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+    * { box-sizing: border-box; }
+
+    body {
+      width: 380px;
+      height: 550px;
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Header */
+    header {
+      background: var(--surface);
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    h1 { margin: 0; font-size: 16px; font-weight: 600; color: #1e293b; display: flex; align-items: center; gap: 8px; }
     
-    /* View Switching Logic */
+    .icon-btn {
+      background: none;
+      border: none;
+      padding: 6px;
+      border-radius: 50%;
+      cursor: pointer;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s;
+    }
+    .icon-btn:hover { background-color: #f1f5f9; color: var(--text); }
+    .icon-btn.active { color: var(--primary); background-color: #eef2ff; }
+    .icon-btn svg { width: 18px; height: 18px; }
+
+    .spin { animation: spin 1s linear infinite; color: var(--primary); }
+    @keyframes spin { 100% { transform: rotate(360deg); } }
+
+    /* Main */
+    main { flex: 1; overflow-y: auto; padding: 16px; position: relative; }
+
+    /* Views */
     .view-section { display: none; }
-    .view-section.active { display: block; }
+    .view-section.active { display: block; animation: fade-in 0.2s; }
+    @keyframes fade-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* Cards & Lists */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 10px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    }
+
+    .announcement-item { border-left: 3px solid transparent; }
+    .announcement-item.unread { border-left-color: var(--primary); background-color: #ffffff; }
+    .announcement-item.read { opacity: 0.7; background-color: #f8fafc; }
+
+    .meta { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
+    .task-tag { background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-weight: 500; }
+    
+    .link-title { 
+      display: block; 
+      font-size: 14px; 
+      font-weight: 500; 
+      color: var(--primary); 
+      text-decoration: none; 
+      margin-bottom: 8px;
+      line-height: 1.4;
+    }
+    .link-title:hover { text-decoration: underline; }
+
+    .btn-action {
+      font-size: 10px;
+      text-transform: uppercase;
+      font-weight: 700;
+      color: var(--primary);
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 0;
+    }
+
+    /* Settings List */
+    .task-item { display: flex; justify-content: space-between; align-items: center; }
+    .task-info { flex: 1; min-width: 0; margin-right: 10px; }
+    .task-name { font-weight: 500; font-size: 13px; margin: 0 0 2px 0; display: flex; align-items: center; gap: 6px; }
+    .task-url { font-size: 11px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .task-selector { font-family: monospace; font-size: 10px; background: #f1f5f9; padding: 2px 4px; border-radius: 3px; color: #475569; }
+
+    .delete-btn { color: #cbd5e1; }
+    .delete-btn:hover { color: #ef4444; }
+
+    /* Forms */
+    .form-group { margin-bottom: 12px; }
+    label { display: block; font-size: 12px; font-weight: 500; margin-bottom: 4px; color: var(--text-muted); }
+    input[type="text"], input[type="url"] {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 13px;
+      outline: none;
+    }
+    input:focus { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.1); }
+    .helper { font-size: 10px; color: #94a3b8; margin-top: 4px; }
+
+    .btn-primary {
+      width: 100%;
+      background: var(--primary);
+      color: white;
+      border: none;
+      padding: 10px;
+      border-radius: 6px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    .btn-primary:hover { background: var(--primary-hover); }
+    
+    .btn-secondary {
+      width: 100%;
+      background: white;
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+      padding: 10px;
+      border-radius: 6px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+
+    .flex-row { display: flex; gap: 8px; }
+
+    /* Empty States */
+    .empty-state { text-align: center; padding: 40px 20px; color: var(--text-muted); font-size: 13px; }
+    .empty-icon { width: 40px; height: 40px; color: #cbd5e1; margin-bottom: 10px; }
+
+    /* Footer */
+    footer { padding: 8px 16px; border-top: 1px solid var(--border); font-size: 11px; color: var(--text-muted); display: flex; justify-content: space-between; background: var(--surface); }
+
+    /* Utility */
+    .hidden { display: none !important; }
+    .text-green { color: #10b981; }
+    .text-red { color: #ef4444; }
+
   </style>
 <script type="importmap">
 {
@@ -33,105 +183,90 @@
 }
 </script>
 </head>
-<body class="bg-slate-50 text-slate-900 font-sans text-sm flex flex-col h-full">
+<body>
 
-  <!-- Header -->
-  <header class="flex items-center justify-between px-4 py-3 bg-white border-b border-slate-200 sticky top-0 z-10 shadow-sm shrink-0">
-    <div class="flex items-center gap-2">
-      <!-- Icon: Activity -->
-      <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-      <h1 class="font-bold text-slate-800 text-lg">Web Monitor</h1>
-    </div>
-    <div class="flex items-center gap-2">
-      <!-- Check Now Button -->
-      <button id="btn-check-now" class="p-2 rounded-full text-slate-600 hover:bg-slate-100 transition-colors" title="Check Now">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+  <header>
+    <h1>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px;"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+      Web Monitor
+    </h1>
+    <div style="display:flex; gap:4px;">
+      <button id="btn-check-now" class="icon-btn" title="Run Check Now">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
       </button>
-      <!-- Settings Button -->
-      <button id="btn-settings" class="p-2 rounded-full text-slate-600 hover:bg-slate-100 transition-colors" title="Settings">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+      <button id="btn-settings" class="icon-btn" title="Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
       </button>
     </div>
   </header>
 
-  <!-- Main Content Area -->
-  <main class="flex-1 overflow-y-auto p-4 relative">
-    
-    <!-- 1. Dashboard View -->
-    <div id="view-dashboard" class="view-section active space-y-4">
-      <div class="flex justify-between items-center mb-2">
-        <h2 class="font-semibold text-slate-700">Latest Updates</h2>
-        <button id="btn-clear-all" class="text-xs text-slate-400 hover:text-red-500 hidden">Clear All</button>
+  <main>
+    <!-- DASHBOARD -->
+    <div id="view-dashboard" class="view-section active">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <h2 style="margin:0; font-size:14px; font-weight:600;">Updates</h2>
+        <button id="btn-clear-all" class="btn-action hidden">Clear All</button>
       </div>
-      
-      <!-- Announcements List -->
-      <div id="announcements-list" class="space-y-3"></div>
+
+      <div id="announcements-list"></div>
 
       <!-- Empty State: No Updates -->
-      <div id="empty-state-dashboard" class="hidden text-center py-10 text-slate-400 text-sm border-2 border-dashed border-slate-200 rounded-lg">
-        No new announcements.
+      <div id="empty-state-dashboard" class="empty-state hidden">
+        <p>No new updates found.</p>
       </div>
 
       <!-- Empty State: No Tasks -->
-      <div id="empty-state-no-tasks" class="hidden flex flex-col items-center justify-center h-48 text-center">
-        <div class="bg-slate-100 p-4 rounded-full mb-4">
-          <svg class="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-        </div>
-        <p class="text-slate-600 mb-2">No active monitors.</p>
-        <p class="text-slate-400 text-xs">Go to settings to add a website.</p>
+      <div id="empty-state-no-tasks" class="empty-state hidden">
+        <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+        <p>No monitors active.<br>Add a website to start.</p>
+        <button onclick="document.getElementById('btn-settings').click()" style="margin-top:8px; color:var(--primary); background:none; border:none; cursor:pointer; font-weight:600;">Go to Settings</button>
       </div>
     </div>
 
-    <!-- 2. Settings View -->
-    <div id="view-settings" class="view-section space-y-4">
-      <div class="flex justify-between items-center">
-        <h2 class="font-semibold text-slate-700">Monitored Sites</h2>
-        <button id="btn-add-task-view" class="flex items-center gap-1 text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-md hover:bg-indigo-700 transition-colors shadow-sm">
-          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-          Add Task
-        </button>
+    <!-- SETTINGS -->
+    <div id="view-settings" class="view-section">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <h2 style="margin:0; font-size:14px; font-weight:600;">Monitors</h2>
+        <button id="btn-add-task-view" class="btn-primary" style="width:auto; padding: 6px 12px; font-size:12px;">+ Add</button>
       </div>
-      
-      <div id="tasks-list" class="space-y-2"></div>
-      
-      <div id="empty-state-settings" class="hidden text-center py-6 text-slate-400 text-xs">
-        No monitoring tasks set up.
+
+      <div id="tasks-list"></div>
+
+      <div id="empty-state-settings" class="empty-state hidden">
+        No websites configured.
       </div>
     </div>
 
-    <!-- 3. Add Task View -->
-    <div id="view-add-task" class="view-section space-y-4">
-      <h2 class="font-semibold text-slate-700">New Monitor Task</h2>
-      <form id="form-add-task" class="space-y-3">
-        <div>
-          <label class="block text-xs font-medium text-slate-700 mb-1">Task Name</label>
-          <input type="text" id="input-name" required class="w-full text-sm p-2 border border-slate-300 rounded focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="e.g. Company News">
+    <!-- ADD TASK -->
+    <div id="view-add-task" class="view-section">
+      <h2 style="margin:0 0 16px 0; font-size:14px; font-weight:600;">Add New Monitor</h2>
+      <form id="form-add-task">
+        <div class="form-group">
+          <label>Name</label>
+          <input type="text" id="input-name" placeholder="e.g. Google Blog" required>
         </div>
-        <div>
-          <label class="block text-xs font-medium text-slate-700 mb-1">Target URL</label>
-          <input type="url" id="input-url" required class="w-full text-sm p-2 border border-slate-300 rounded focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="https://example.com/news">
+        <div class="form-group">
+          <label>Target URL</label>
+          <input type="url" id="input-url" placeholder="https://..." required>
         </div>
-        <div>
-          <label class="block text-xs font-medium text-slate-700 mb-1">CSS Selector</label>
-          <input type="text" id="input-selector" required class="w-full text-sm p-2 border border-slate-300 rounded font-mono bg-slate-50 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder=".news-item h3">
-          <p class="text-[10px] text-slate-500 mt-1">Tip: Right-click element in Chrome > Inspect > Copy > Copy Selector</p>
+        <div class="form-group">
+          <label>CSS Selector</label>
+          <input type="text" id="input-selector" placeholder="e.g. .article-title h2" required>
+          <div class="helper">Right-click element in Chrome > Inspect > Copy Selector</div>
         </div>
-        <div class="flex gap-2 pt-2">
-          <button type="button" id="btn-cancel-add" class="flex-1 py-2 text-xs font-medium text-slate-600 bg-white border border-slate-300 rounded hover:bg-slate-50">Cancel</button>
-          <button type="submit" class="flex-1 py-2 text-xs font-medium text-white bg-indigo-600 rounded hover:bg-indigo-700 shadow-sm">Save Task</button>
+        <div class="flex-row" style="margin-top:20px;">
+          <button type="button" id="btn-cancel-add" class="btn-secondary">Cancel</button>
+          <button type="submit" class="btn-primary">Save Monitor</button>
         </div>
       </form>
     </div>
-
   </main>
 
-  <!-- Footer -->
-  <footer class="bg-white border-t border-slate-200 px-4 py-2 text-xs text-slate-500 flex justify-between items-center shrink-0">
+  <footer>
     <span id="stat-monitored">Monitored: 0</span>
     <span id="stat-unread">Unread: 0</span>
   </footer>
 
-  <!-- Load pure JS logic -->
   <script src="popup.js"></script>
 </body>
 </html>
