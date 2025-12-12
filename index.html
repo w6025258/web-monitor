@@ -19,8 +19,8 @@
     * { box-sizing: border-box; }
 
     body {
-      /* Modified: Fixed width 1000px as requested */
-      width: 1000px;
+      /* Modified: Adjusted width to 780px to prevent horizontal scrollbars in Chrome Popup (max 800px) */
+      width: 780px;
       height: 600px;
       margin: 0;
       font-family: "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -28,6 +28,7 @@
       color: var(--text);
       display: flex;
       flex-direction: column;
+      overflow-x: hidden; /* Force hide horizontal scrollbar */
     }
 
     /* Header */
@@ -66,7 +67,7 @@
     @keyframes spin { 100% { transform: rotate(360deg); } }
 
     /* Main */
-    main { flex: 1; overflow-y: auto; overflow-x: auto; padding: 16px; position: relative; }
+    main { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 16px; position: relative; }
 
     /* Views */
     .view-section { display: none; }
@@ -85,8 +86,8 @@
     /* --- Dashboard Grid Layout --- */
     #announcements-list {
       display: grid;
-      /* Modified: Use 1fr to fit 5 columns within the 1000px body width */
-      grid-template-columns: repeat(5, 1fr);
+      /* Modified: Changed to 4 columns to fit the narrower 780px body width nicely */
+      grid-template-columns: repeat(4, 1fr);
       gap: 10px;
     }
 
