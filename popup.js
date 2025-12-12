@@ -337,10 +337,15 @@ function renderSettings() {
       statusHtml = `<span class="text-red" title="${escapeHtml(task.errorMessage)}">● 错误</span>`;
     }
 
+    const lastResultPreview = task.lastResult ? 
+      `<div style="font-size:10px; color:#94a3b8; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">最新抓取: ${escapeHtml(task.lastResult)}</div>` 
+      : '';
+
     div.innerHTML = `
       <div class="task-info">
         <div class="task-name">${escapeHtml(task.name)}</div>
         <div class="task-url" title="${escapeHtml(task.url)}">${escapeHtml(task.url)}</div>
+        ${lastResultPreview}
         <div style="margin-top:4px; display:flex; justify-content:space-between; align-items:center;">
            <span class="task-selector">${escapeHtml(task.selector)}</span>
            <span style="font-size:10px;">${statusHtml}</span>

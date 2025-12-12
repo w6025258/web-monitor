@@ -188,12 +188,13 @@ async function checkAllTasks() {
         const currentContent = result.text || '';
         const contentHash = await generateHash(currentContent);
         
-        const isFirstRun = task.lastContentHash === '';
+        // Check change (First run is also considered a change from "nothing")
         const hasChanged = currentContent.length > 0 && task.lastContentHash !== contentHash;
         
         if (hasChanged) {
-          if (!isFirstRun) {
-            console.log(`[Web Monitor] 🎉 发现更新: ${task.name}`);
+            console.log(`[Web Monitor] 🎉 发现新内容: ${task.name}`);
+            
+            // Generate announcement even on first run
             announcements.unshift({
               id: generateId(),
               taskId: task.id,
@@ -204,9 +205,6 @@ async function checkAllTasks() {
               isRead: false,
             });
             hasNewUpdates = true;
-          } else {
-            console.log(`[Web Monitor] 🏁 基准已建立: ${task.name}`);
-          }
         }
 
         return {
