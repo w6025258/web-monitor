@@ -124,14 +124,9 @@
       -webkit-mask-image: linear-gradient(to bottom, black 85%, transparent 100%);
     }
     
-    /* Ensure images in grid don't break layout */
+    /* Ensure images in grid don't break layout and are HIDDEN as requested */
     .html-content img { 
-      width: 100%; 
-      height: 120px; 
-      object-fit: cover; 
-      border-radius: 4px; 
-      margin-bottom: 4px;
-      display: block;
+      display: none !important; /* Modified: Do not display images */
     }
     
     .html-content a { color: var(--primary); text-decoration: none; font-weight: 500; }

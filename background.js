@@ -187,9 +187,9 @@ async function checkAllTasks() {
   await chrome.storage.local.set({ isChecking: true });
   
   try {
-    const data = await chrome.storage.local.get(['tasks', 'announcements']);
+    const data = await chrome.storage.local.get(['tasks']); // Don't get 'announcements', we will clear it
     const tasks = data.tasks || [];
-    let announcements = data.announcements || [];
+    let announcements = []; // Clear history: Start with fresh array
     let hasNewUpdates = false;
 
     if (tasks.length === 0) {
@@ -275,6 +275,9 @@ async function checkAllTasks() {
     if (hasNewUpdates) {
       chrome.action.setBadgeText({ text: 'NEW' });
       chrome.action.setBadgeBackgroundColor({ color: '#ef4444' });
+    } else {
+      // Clear badge if we cleared history and found nothing new (though logically logic above adds everything)
+      chrome.action.setBadgeText({ text: '' }); 
     }
 
   } catch (err) {
