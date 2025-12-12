@@ -23,6 +23,11 @@ const btnCancelAdd = document.getElementById('btn-cancel-add');
 const btnClearAll = document.getElementById('btn-clear-all');
 const formAddTask = document.getElementById('form-add-task');
 
+// Data Management Elements
+const btnExport = document.getElementById('btn-export');
+const btnImport = document.getElementById('btn-import');
+const fileInputImport = document.getElementById('file-input-import');
+
 // Test Selector Elements
 const btnTestSelector = document.getElementById('btn-test-selector');
 const previewContainer = document.getElementById('preview-container');
@@ -158,6 +163,92 @@ btnClearAll.addEventListener('click', () => {
     chrome.action.setBadgeText({ text: '' });
   }
 });
+
+// --- Data Management (Export/Import) ---
+
+// Export
+btnExport.addEventListener('click', () => {
+  if (tasks.length === 0) {
+    alert('暂无配置可导出');
+    return;
+  }
+  
+  // Clean data for export (remove internal state if needed, but keeping basic fields is fine)
+  const exportData = tasks.map(t => ({
+    name: t.name,
+    url: t.url,
+    selector: t.selector
+  }));
+
+  const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `web-monitor-config-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+});
+
+// Import Click Trigger
+btnImport.addEventListener('click', () => {
+  fileInputImport.click();
+});
+
+// Import File Handler
+fileInputImport.addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (event) => {
+    try {
+      const importedData = JSON.parse(event.target.result);
+      
+      if (!Array.isArray(importedData)) {
+        throw new Error('无效的文件格式: 根元素应为数组');
+      }
+
+      let count = 0;
+      const newTasks = [];
+
+      importedData.forEach(item => {
+        if (item.name && item.url && item.selector) {
+          newTasks.push({
+            id: Date.now().toString(36) + Math.random().toString(36).substr(2), // Generate new ID
+            name: item.name,
+            url: item.url,
+            selector: item.selector,
+            lastChecked: 0,
+            lastContentHash: '',
+            status: 'active'
+          });
+          count++;
+        }
+      });
+
+      if (count === 0) {
+        alert('未找到有效的监控配置。请检查文件格式。');
+        return;
+      }
+
+      if (confirm(`解析成功，发现 ${count} 个有效配置。\n点击确定将把这些任务添加到现有列表中。`)) {
+         const combinedTasks = [...tasks, ...newTasks];
+         chrome.storage.local.set({ tasks: combinedTasks }, () => {
+            alert('导入成功！');
+            fileInputImport.value = ''; // Reset input
+         });
+      }
+
+    } catch (err) {
+      alert('导入失败: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+});
+
 
 // Add/Edit Task Submit
 formAddTask.addEventListener('submit', (e) => {
@@ -415,5 +506,5 @@ function escapeHtml(str) {
             .replace(/</g, "&lt;")
             .replace(/>/g, "&gt;")
             .replace(/"/g, "&quot;")
-            .replace(/'/g, "&#039;");
+            .replace(/"/g, "&#039;");
 }

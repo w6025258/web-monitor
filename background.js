@@ -111,12 +111,26 @@ async function scrapeDynamicContent(url, selector) {
         const el = document.querySelector(sel);
         if (!el) return { text: '', href: undefined, title: document.title };
         
+        // Remove noise
+        const clone = el.cloneNode(true);
+        clone.querySelectorAll('script, style, noscript, svg, img').forEach(n => n.remove());
+
+        // Use innerText if available (it handles formatting nicely), fallback to textContent
+        let text = el.innerText || el.textContent || '';
+        
         let href = undefined;
         if (el.tagName === 'A') href = el.href;
         else if (el.querySelector('a')) href = el.querySelector('a').href;
 
+        // Clean up whitespace similar to offscreen
+        text = text
+            .replace(/[ \t]+/g, ' ')
+            .replace(/\n\s*\n/g, '\n')
+            .replace(/\n+/g, '\n')
+            .trim();
+
         return {
-          text: (el.textContent || '').trim().replace(/\s+/g, ' '),
+          text: text,
           href: href,
           title: document.title
         };
@@ -185,7 +199,6 @@ async function checkAllTasks() {
         }
 
         // CRITICAL CHECK: If text is empty/null, treat as ERROR.
-        // Do not let empty strings update the hash.
         if (!result.text || result.text.trim().length === 0) {
             throw new Error("未找到匹配内容 (Selector matched nothing)");
         }
@@ -193,40 +206,37 @@ async function checkAllTasks() {
         const currentContent = result.text;
         const contentHash = await generateHash(currentContent);
         
-        // Check change 
-        // Note: We only compare against previous hash if we have a valid current content.
-        const hasChanged = task.lastContentHash !== contentHash;
+        // --- 变更：移除哈希比对 ---
+        // 用户要求：不要做重复校验，每次抓取信息都显示最新数据。
+        // 之前的逻辑：const hasChanged = task.lastContentHash !== contentHash;
         
-        if (hasChanged) {
-            console.log(`[Web Monitor] 🎉 发现新内容: ${task.name}`);
-            
-            // Generate announcement
-            announcements.unshift({
-              id: generateId(),
-              taskId: task.id,
-              taskName: task.name,
-              title: currentContent.substring(0, 100).replace(/\s+/g, ' '),
-              link: result.href || task.url,
-              foundAt: Date.now(),
-              isRead: false,
-            });
-            hasNewUpdates = true;
-        }
+        console.log(`[Web Monitor] 🔄 抓取成功 (始终更新): ${task.name}`);
+        
+        // 始终推送到“最新动态”列表
+        announcements.unshift({
+          id: generateId(),
+          taskId: task.id,
+          taskName: task.name,
+          title: currentContent.substring(0, 100).replace(/\n/g, ' ') + (currentContent.length > 100 ? '...' : ''), 
+          link: result.href || task.url,
+          foundAt: Date.now(),
+          isRead: false,
+        });
+        hasNewUpdates = true;
 
-        // SUCCESS: Update everything including hash and lastResult
+        // SUCCESS
         return {
           ...task,
           lastChecked: Date.now(),
-          lastContentHash: contentHash, // Only update hash on success
-          lastResult: currentContent.substring(0, 50), // Only update preview on success
+          lastContentHash: contentHash, 
+          lastResult: currentContent.substring(0, 100), // Preview can be longer now
           status: 'active',
           errorMessage: undefined
         };
       } catch (e) {
         console.error(`[Web Monitor] ❌ 任务错误 ${task.name}:`, e.message);
         
-        // FAILURE: Return task but DO NOT update lastContentHash or lastResult
-        // This ensures the next successful check compares against the last known GOOD content.
+        // FAILURE: Return task but DO NOT update lastContentHash
         return {
           ...task,
           lastChecked: Date.now(),
@@ -235,6 +245,11 @@ async function checkAllTasks() {
         };
       }
     }));
+
+    // 限制历史记录数量，防止无限增长 (Keep last 50)
+    if (announcements.length > 50) {
+      announcements = announcements.slice(0, 50);
+    }
 
     await chrome.storage.local.set({ tasks: updatedTasks, announcements, isChecking: false });
     

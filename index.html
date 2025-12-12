@@ -175,8 +175,43 @@
     .text-green { color: #10b981; }
     .text-red { color: #ef4444; }
 
+    /* Preview Box Styles */
+    #preview-container {
+      margin-top: 12px;
+      padding: 10px;
+      background: #f8fafc;
+      border-radius: 6px;
+      font-size: 11px;
+      border: 1px solid #e2e8f0;
+    }
+    #preview-result {
+       word-break: break-all;
+       max-height: 150px;
+       overflow-y: auto;
+       font-family: monospace;
+       line-height: 1.5;
+       color: var(--text);
+       white-space: pre-wrap; /* Allows newlines to be shown */
+    }
+
+    /* Data Management Section */
+    .data-management {
+      margin-top: 20px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+    }
+    .data-btn-group {
+      display: flex;
+      gap: 10px;
+    }
+    .btn-small {
+      flex: 1;
+      padding: 6px;
+      font-size: 11px;
+    }
+
   </style>
-<!-- <script type="importmap">
+<script type="importmap">
 {
   "imports": {
     "react": "https://esm.sh/react@^19.2.3",
@@ -185,7 +220,7 @@
     "lucide-react": "https://esm.sh/lucide-react@^0.560.0"
   }
 }
-</script> -->
+</script>
 </head>
 <body>
 
@@ -239,6 +274,22 @@
       <div id="empty-state-settings" class="empty-state hidden">
         暂无监控任务，点击右上角添加。
       </div>
+
+      <!-- Data Management -->
+      <div class="data-management">
+         <h3 style="margin:0 0 8px 0; font-size:12px; font-weight:600; color:var(--text-muted);">数据管理</h3>
+         <div class="data-btn-group">
+            <button id="btn-export" class="btn-secondary btn-small">
+               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;vertical-align:middle;margin-right:4px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+               导出配置
+            </button>
+            <button id="btn-import" class="btn-secondary btn-small">
+               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;vertical-align:middle;margin-right:4px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+               导入配置
+            </button>
+            <input type="file" id="file-input-import" accept=".json" style="display:none">
+         </div>
+      </div>
     </div>
 
     <!-- ADD TASK -->
@@ -262,12 +313,12 @@
           <div class="helper">在 Chrome 中右键元素 > 检查 > 复制 > 复制 selector</div>
 
           <!-- Preview Result Area -->
-          <div id="preview-container" class="hidden" style="margin-top:12px; padding:10px; background:#f8fafc; border-radius:6px; font-size:11px; border:1px solid #e2e8f0;">
+          <div id="preview-container" class="hidden">
              <div style="font-weight:600; margin-bottom:6px; color:#64748b; display:flex; justify-content:space-between;">
                <span>预览结果</span>
                <span id="preview-status" style="font-weight:400;"></span>
              </div>
-             <div id="preview-result" style="word-break:break-all; max-height:100px; overflow-y:auto; font-family:monospace; line-height:1.4; color:var(--text);"></div>
+             <div id="preview-result"></div>
           </div>
         </div>
         <div class="flex-row" style="margin-top:20px;">
