@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "Web Update Monitor",
+  "version": "1.0.0",
+  "description": "Monitor websites for updates and announcements automatically.",
+  "permissions": [
+    "storage",
+    "alarms",
+    "offscreen"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "index.html",
+    "default_title": "Web Monitor"
+  },
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+}
