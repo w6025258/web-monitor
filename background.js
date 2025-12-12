@@ -2,29 +2,26 @@
 const ALARM_NAME = 'monitor_check';
 const OFFSCREEN_DOCUMENT_PATH = 'offscreen.html';
 
-console.log("[Web Monitor] Service Worker Loading...");
+console.log("[Web Monitor] Service Worker Initialized");
 
 // 1. Initialize Alarms
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === ALARM_NAME) {
-    console.log("[Web Monitor] Alarm triggered: " + new Date().toISOString());
+    console.log("[Web Monitor] Alarm triggered");
     await checkAllTasks();
   }
 });
 
-// Setup default alarm on install and run an immediate check
 chrome.runtime.onInstalled.addListener(async () => {
-  console.log("[Web Monitor] Extension Installed/Updated");
+  console.log("[Web Monitor] Installed");
   chrome.alarms.create(ALARM_NAME, { periodInMinutes: 60 });
-  // Run a check immediately for testing/feedback
   await checkAllTasks();
 });
 
-// 2. Offscreen Document Management
+// 2. Offscreen Helper
 let creatingOffscreen; 
 
 async function setupOffscreenDocument(path) {
-  // Check existence (Modern API)
   if (chrome.runtime.getContexts) {
     const contexts = await chrome.runtime.getContexts({
       contextTypes: ['OFFSCREEN_DOCUMENT'],
@@ -32,27 +29,24 @@ async function setupOffscreenDocument(path) {
     });
     if (contexts.length > 0) return;
   } else {
-    // Fallback for older Chrome versions (check clients)
-    const clients = await clients.matchAll();
+    const clients = await self.clients.matchAll();
     if (clients.some(c => c.url === chrome.runtime.getURL(path))) return;
   }
 
-  // Create if not exists (with concurrency lock)
   if (creatingOffscreen) {
     await creatingOffscreen;
   } else {
     creatingOffscreen = chrome.offscreen.createDocument({
       url: path,
-      reasons: ['DOM_PARSER', 'BLOBS'], // Added BLOBS if needed for fetch
-      justification: 'Scrape and parse HTML to detect website updates',
+      reasons: ['DOM_PARSER', 'BLOBS'],
+      justification: 'Scrape websites',
     });
     
     try {
       await creatingOffscreen;
-      console.log("[Web Monitor] Offscreen document created");
     } catch (err) {
       if (!err.message.startsWith('Only a single offscreen')) {
-         console.error("[Web Monitor] Offscreen creation failed", err);
+         console.warn("Offscreen creation warning:", err);
       }
     } finally {
       creatingOffscreen = null;
@@ -60,119 +54,10 @@ async function setupOffscreenDocument(path) {
   }
 }
 
-// 3. Core Logic: Check Updates
-async function checkAllTasks() {
-  console.log("[Web Monitor] Starting checkAllTasks...");
-  
-  // Notify UI we are checking
-  await chrome.storage.local.set({ isChecking: true });
-
-  try {
-    const data = await chrome.storage.local.get(['tasks', 'announcements']);
-    const tasks = data.tasks || [];
-    let announcements = data.announcements || [];
-    let hasNewUpdates = false;
-
-    console.log(`[Web Monitor] Found ${tasks.length} tasks.`);
-
-    if (tasks.length === 0) {
-      console.log("[Web Monitor] No tasks to check.");
-      await chrome.storage.local.set({ isChecking: false });
-      return;
-    }
-
-    // Ensure offscreen is ready
-    await setupOffscreenDocument(OFFSCREEN_DOCUMENT_PATH);
-
-    const updatedTasks = await Promise.all(
-      tasks.map(async (task) => {
-        console.log(`[Web Monitor] Checking task: ${task.name} (${task.url})`);
-        try {
-          // Offload BOTH Fetch and Parse to offscreen to avoid message size limits
-          // and keep scraping logic unified.
-          const result = await sendMessageToOffscreen({
-            type: 'SCRAPE_URL',
-            payload: { 
-              url: task.url, 
-              selector: task.selector 
-            },
-          });
-
-          if (result.error) throw new Error(result.error);
-          
-          const currentContent = result.text ? result.text.trim() : '';
-          console.log(`[Web Monitor] Task ${task.name} content length: ${currentContent.length}`);
-
-          const contentHash = await generateHash(currentContent);
-
-          if (currentContent && task.lastContentHash !== contentHash) {
-             console.log(`[Web Monitor] Change detected for ${task.name}`);
-            // New Content Found
-            if (task.lastContentHash !== '') {
-              const newAnnouncement = {
-                id: crypto.randomUUID(),
-                taskId: task.id,
-                taskName: task.name,
-                title: currentContent.substring(0, 100) + (currentContent.length > 100 ? '...' : ''),
-                link: result.href || task.url,
-                foundAt: Date.now(),
-                isRead: false,
-              };
-              announcements.unshift(newAnnouncement);
-              hasNewUpdates = true;
-            }
-          } else {
-             console.log(`[Web Monitor] No change for ${task.name}`);
-          }
-
-          return {
-            ...task,
-            lastChecked: Date.now(),
-            lastContentHash: contentHash,
-            lastResult: currentContent,
-            status: 'active',
-            errorMessage: undefined,
-          };
-        } catch (error) {
-          console.error(`[Web Monitor] Error checking ${task.name}:`, error);
-          return {
-            ...task,
-            lastChecked: Date.now(),
-            status: 'error',
-            errorMessage: error.message || 'Unknown error',
-          };
-        }
-      })
-    );
-
-    // D. Save Data
-    await chrome.storage.local.set({
-      tasks: updatedTasks,
-      announcements,
-      isChecking: false,
-    });
-
-    if (hasNewUpdates) {
-      chrome.action.setBadgeText({ text: 'NEW' });
-      chrome.action.setBadgeBackgroundColor({ color: '#ef4444' });
-    }
-
-  } catch (err) {
-    console.error('[Web Monitor] Global check failed', err);
-    await chrome.storage.local.set({ isChecking: false });
-  } 
-}
-
-// Helper: Send message to offscreen with timeout
 async function sendMessageToOffscreen(message) {
+  await setupOffscreenDocument(OFFSCREEN_DOCUMENT_PATH);
   return new Promise((resolve) => {
-    // Set a timeout to prevent hanging
-    const timeoutId = setTimeout(() => {
-      resolve({ error: 'Timeout waiting for offscreen response' });
-    }, 30000); // 30s timeout for fetch
-
     chrome.runtime.sendMessage(message, (response) => {
-      clearTimeout(timeoutId);
       if (chrome.runtime.lastError) {
         resolve({ error: chrome.runtime.lastError.message });
       } else {
@@ -182,20 +67,95 @@ async function sendMessageToOffscreen(message) {
   });
 }
 
-// Helper: Simple Hash
-async function generateHash(str) {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(str);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+// 3. Logic
+async function checkAllTasks() {
+  await chrome.storage.local.set({ isChecking: true });
+  
+  try {
+    const data = await chrome.storage.local.get(['tasks', 'announcements']);
+    const tasks = data.tasks || [];
+    let announcements = data.announcements || [];
+    let hasNewUpdates = false;
+
+    if (tasks.length === 0) {
+      console.log("[Web Monitor] No tasks.");
+      await chrome.storage.local.set({ isChecking: false });
+      return;
+    }
+
+    const updatedTasks = await Promise.all(tasks.map(async (task) => {
+      try {
+        console.log(`Checking ${task.url}`);
+        const result = await sendMessageToOffscreen({
+          type: 'SCRAPE_URL',
+          payload: { url: task.url, selector: task.selector }
+        });
+
+        if (result.error) throw new Error(result.error);
+
+        const currentContent = result.text || '';
+        const contentHash = await generateHash(currentContent);
+
+        // Detect Change: Must have content, hash different from last, and not first run (unless you want first run alert)
+        // Here we silently update hash on first run so we don't alert everything as "new" immediately, 
+        // OR we can choose to alert. Let's alert only if it's an update.
+        const isFirstRun = task.lastContentHash === '';
+        
+        if (currentContent && task.lastContentHash !== contentHash) {
+          if (!isFirstRun) {
+            announcements.unshift({
+              id: crypto.randomUUID(),
+              taskId: task.id,
+              taskName: task.name,
+              title: currentContent.substring(0, 100),
+              link: result.href || task.url,
+              foundAt: Date.now(),
+              isRead: false,
+            });
+            hasNewUpdates = true;
+          }
+        }
+
+        return {
+          ...task,
+          lastChecked: Date.now(),
+          lastContentHash: contentHash,
+          status: 'active',
+          errorMessage: undefined // Clear previous errors
+        };
+      } catch (e) {
+        console.error(`Error on ${task.name}:`, e);
+        return {
+          ...task,
+          lastChecked: Date.now(),
+          status: 'error',
+          errorMessage: e.message
+        };
+      }
+    }));
+
+    await chrome.storage.local.set({ tasks: updatedTasks, announcements, isChecking: false });
+    
+    if (hasNewUpdates) {
+      chrome.action.setBadgeText({ text: 'NEW' });
+      chrome.action.setBadgeBackgroundColor({ color: '#ef4444' });
+    }
+
+  } catch (err) {
+    console.error(err);
+    await chrome.storage.local.set({ isChecking: false });
+  }
 }
 
-// Listen for manual trigger from Popup
+async function generateHash(str) {
+  const data = new TextEncoder().encode(str);
+  const hash = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  console.log("[Web Monitor] Message received:", msg);
   if (msg.action === 'TRIGGER_CHECK') {
     checkAllTasks().then(() => sendResponse({ status: 'done' }));
-    return true; // async response
+    return true; 
   }
 });

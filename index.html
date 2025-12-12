@@ -4,27 +4,23 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Web Monitor</title>
+  <!-- Tailwind CSS via CDN for styling -->
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     body {
-      width: 400px; /* Standard extension popup width */
+      width: 400px;
       height: 600px;
       overflow: hidden;
     }
-    /* Custom scrollbar for webkit */
-    ::-webkit-scrollbar {
-      width: 8px;
-    }
-    ::-webkit-scrollbar-track {
-      background: #f1f1f1; 
-    }
-    ::-webkit-scrollbar-thumb {
-      background: #888; 
-      border-radius: 4px;
-    }
-    ::-webkit-scrollbar-thumb:hover {
-      background: #555; 
-    }
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-track { background: #f8fafc; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    
+    /* View Switching Logic */
+    .view-section { display: none; }
+    .view-section.active { display: block; }
   </style>
 <script type="importmap">
 {
@@ -37,8 +33,105 @@
 }
 </script>
 </head>
-<body class="bg-slate-50 text-slate-900 font-sans text-sm">
-  <div id="root"></div>
-  <script type="module" src="./index.tsx"></script>
+<body class="bg-slate-50 text-slate-900 font-sans text-sm flex flex-col h-full">
+
+  <!-- Header -->
+  <header class="flex items-center justify-between px-4 py-3 bg-white border-b border-slate-200 sticky top-0 z-10 shadow-sm shrink-0">
+    <div class="flex items-center gap-2">
+      <!-- Icon: Activity -->
+      <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+      <h1 class="font-bold text-slate-800 text-lg">Web Monitor</h1>
+    </div>
+    <div class="flex items-center gap-2">
+      <!-- Check Now Button -->
+      <button id="btn-check-now" class="p-2 rounded-full text-slate-600 hover:bg-slate-100 transition-colors" title="Check Now">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+      </button>
+      <!-- Settings Button -->
+      <button id="btn-settings" class="p-2 rounded-full text-slate-600 hover:bg-slate-100 transition-colors" title="Settings">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Content Area -->
+  <main class="flex-1 overflow-y-auto p-4 relative">
+    
+    <!-- 1. Dashboard View -->
+    <div id="view-dashboard" class="view-section active space-y-4">
+      <div class="flex justify-between items-center mb-2">
+        <h2 class="font-semibold text-slate-700">Latest Updates</h2>
+        <button id="btn-clear-all" class="text-xs text-slate-400 hover:text-red-500 hidden">Clear All</button>
+      </div>
+      
+      <!-- Announcements List -->
+      <div id="announcements-list" class="space-y-3"></div>
+
+      <!-- Empty State: No Updates -->
+      <div id="empty-state-dashboard" class="hidden text-center py-10 text-slate-400 text-sm border-2 border-dashed border-slate-200 rounded-lg">
+        No new announcements.
+      </div>
+
+      <!-- Empty State: No Tasks -->
+      <div id="empty-state-no-tasks" class="hidden flex flex-col items-center justify-center h-48 text-center">
+        <div class="bg-slate-100 p-4 rounded-full mb-4">
+          <svg class="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+        </div>
+        <p class="text-slate-600 mb-2">No active monitors.</p>
+        <p class="text-slate-400 text-xs">Go to settings to add a website.</p>
+      </div>
+    </div>
+
+    <!-- 2. Settings View -->
+    <div id="view-settings" class="view-section space-y-4">
+      <div class="flex justify-between items-center">
+        <h2 class="font-semibold text-slate-700">Monitored Sites</h2>
+        <button id="btn-add-task-view" class="flex items-center gap-1 text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-md hover:bg-indigo-700 transition-colors shadow-sm">
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+          Add Task
+        </button>
+      </div>
+      
+      <div id="tasks-list" class="space-y-2"></div>
+      
+      <div id="empty-state-settings" class="hidden text-center py-6 text-slate-400 text-xs">
+        No monitoring tasks set up.
+      </div>
+    </div>
+
+    <!-- 3. Add Task View -->
+    <div id="view-add-task" class="view-section space-y-4">
+      <h2 class="font-semibold text-slate-700">New Monitor Task</h2>
+      <form id="form-add-task" class="space-y-3">
+        <div>
+          <label class="block text-xs font-medium text-slate-700 mb-1">Task Name</label>
+          <input type="text" id="input-name" required class="w-full text-sm p-2 border border-slate-300 rounded focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="e.g. Company News">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-700 mb-1">Target URL</label>
+          <input type="url" id="input-url" required class="w-full text-sm p-2 border border-slate-300 rounded focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="https://example.com/news">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-700 mb-1">CSS Selector</label>
+          <input type="text" id="input-selector" required class="w-full text-sm p-2 border border-slate-300 rounded font-mono bg-slate-50 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder=".news-item h3">
+          <p class="text-[10px] text-slate-500 mt-1">Tip: Right-click element in Chrome > Inspect > Copy > Copy Selector</p>
+        </div>
+        <div class="flex gap-2 pt-2">
+          <button type="button" id="btn-cancel-add" class="flex-1 py-2 text-xs font-medium text-slate-600 bg-white border border-slate-300 rounded hover:bg-slate-50">Cancel</button>
+          <button type="submit" class="flex-1 py-2 text-xs font-medium text-white bg-indigo-600 rounded hover:bg-indigo-700 shadow-sm">Save Task</button>
+        </div>
+      </form>
+    </div>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="bg-white border-t border-slate-200 px-4 py-2 text-xs text-slate-500 flex justify-between items-center shrink-0">
+    <span id="stat-monitored">Monitored: 0</span>
+    <span id="stat-unread">Unread: 0</span>
+  </footer>
+
+  <!-- Load pure JS logic -->
+  <script src="popup.js"></script>
 </body>
 </html>
