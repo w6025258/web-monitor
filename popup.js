@@ -23,6 +23,12 @@ const btnCancelAdd = document.getElementById('btn-cancel-add');
 const btnClearAll = document.getElementById('btn-clear-all');
 const formAddTask = document.getElementById('form-add-task');
 
+// Test Selector Elements
+const btnTestSelector = document.getElementById('btn-test-selector');
+const previewContainer = document.getElementById('preview-container');
+const previewResult = document.getElementById('preview-result');
+const previewStatus = document.getElementById('preview-status');
+
 const listAnnouncements = document.getElementById('announcements-list');
 const listTasks = document.getElementById('tasks-list');
 const statMonitored = document.getElementById('stat-monitored');
@@ -66,6 +72,7 @@ btnSettings.addEventListener('click', () => {
 btnAddTaskView.addEventListener('click', () => {
   editingTaskId = null; // Reset edit mode
   formAddTask.reset();
+  resetPreview();
   viewAddTaskTitle.textContent = "添加新监控";
   switchView('addTask');
 });
@@ -73,8 +80,15 @@ btnAddTaskView.addEventListener('click', () => {
 btnCancelAdd.addEventListener('click', () => {
   editingTaskId = null;
   formAddTask.reset();
+  resetPreview();
   switchView('settings');
 });
+
+function resetPreview() {
+  previewContainer.classList.add('hidden');
+  previewResult.textContent = '';
+  previewStatus.textContent = '';
+}
 
 // Manual Check
 btnCheckNow.addEventListener('click', () => {
@@ -82,6 +96,59 @@ btnCheckNow.addEventListener('click', () => {
   btnCheckNow.classList.add('spin');
   // Send message to background
   chrome.runtime.sendMessage({ action: 'TRIGGER_CHECK' });
+});
+
+// Test Selector Action
+btnTestSelector.addEventListener('click', async () => {
+  const url = document.getElementById('input-url').value.trim();
+  const selector = document.getElementById('input-selector').value.trim();
+
+  if (!url || !selector) {
+    alert('请先填写 URL 和 CSS 选择器');
+    return;
+  }
+
+  // UI Loading
+  const originalBtnText = btnTestSelector.textContent;
+  btnTestSelector.textContent = '...';
+  btnTestSelector.disabled = true;
+  
+  previewContainer.classList.remove('hidden');
+  previewResult.textContent = '正在连接目标网页并抓取内容...';
+  previewResult.style.color = 'var(--text-muted)';
+  previewStatus.textContent = '';
+
+  try {
+    // Send message to background to perform ad-hoc scrape
+    const response = await chrome.runtime.sendMessage({
+      action: 'TEST_SCRAPE',
+      payload: { url, selector }
+    });
+
+    // Handle Response
+    btnTestSelector.textContent = originalBtnText;
+    btnTestSelector.disabled = false;
+
+    if (response.error) {
+      previewResult.textContent = '抓取错误: ' + response.error;
+      previewResult.style.color = '#ef4444';
+      previewStatus.textContent = '❌ 失败';
+    } else if (!response.text) {
+      previewResult.innerHTML = `未找到匹配内容。<br><br>页面标题: <b>${escapeHtml(response.pageTitle)}</b><br>可能原因：<br>1. 选择器错误<br>2. 页面内容由 JS 动态生成（插件只能抓取原始 HTML）<br>3. 网站有反爬虫验证`;
+      previewResult.style.color = '#f59e0b';
+      previewStatus.textContent = '⚠️ 无结果';
+    } else {
+      previewResult.textContent = response.text;
+      previewResult.style.color = 'var(--text)';
+      previewStatus.textContent = '✅ 成功匹配';
+    }
+
+  } catch (err) {
+    btnTestSelector.textContent = originalBtnText;
+    btnTestSelector.disabled = false;
+    previewResult.textContent = '通信错误: ' + err.message;
+    previewResult.style.color = '#ef4444';
+  }
 });
 
 // Clear History
@@ -145,6 +212,7 @@ formAddTask.addEventListener('submit', (e) => {
     chrome.runtime.sendMessage({ action: 'TRIGGER_CHECK' });
     
     formAddTask.reset();
+    resetPreview();
     editingTaskId = null;
     switchView('settings');
   }
@@ -313,6 +381,8 @@ function startEditing(task) {
   document.getElementById('input-url').value = task.url;
   document.getElementById('input-selector').value = task.selector;
   
+  resetPreview();
+
   // Change Title
   viewAddTaskTitle.textContent = "编辑监控任务";
   

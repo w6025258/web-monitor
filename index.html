@@ -158,6 +158,7 @@
       border-radius: 6px;
       font-weight: 500;
       cursor: pointer;
+      text-align: center;
     }
 
     .flex-row { display: flex; gap: 8px; }
@@ -254,8 +255,20 @@
         </div>
         <div class="form-group">
           <label>CSS 选择器 (Selector)</label>
-          <input type="text" id="input-selector" placeholder="例如：.article-title h2" required>
+          <div style="display:flex; gap:8px;">
+            <input type="text" id="input-selector" placeholder="例如：.article-title h2" style="flex:1" required>
+            <button type="button" id="btn-test-selector" class="btn-secondary" style="width:auto; padding:8px 12px; font-size:12px; min-width:60px;">测试</button>
+          </div>
           <div class="helper">在 Chrome 中右键元素 > 检查 > 复制 > 复制 selector</div>
+
+          <!-- Preview Result Area -->
+          <div id="preview-container" class="hidden" style="margin-top:12px; padding:10px; background:#f8fafc; border-radius:6px; font-size:11px; border:1px solid #e2e8f0;">
+             <div style="font-weight:600; margin-bottom:6px; color:#64748b; display:flex; justify-content:space-between;">
+               <span>预览结果</span>
+               <span id="preview-status" style="font-weight:400;"></span>
+             </div>
+             <div id="preview-result" style="word-break:break-all; max-height:100px; overflow-y:auto; font-family:monospace; line-height:1.4; color:var(--text);"></div>
+          </div>
         </div>
         <div class="flex-row" style="margin-top:20px;">
           <button type="button" id="btn-cancel-add" class="btn-secondary">取消</button>

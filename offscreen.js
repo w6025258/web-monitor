@@ -16,15 +16,19 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
 async function scrapeAndParse(url, selector) {
   try {
-    // Set a timeout for the fetch request (10 seconds)
+    // Set a timeout for the fetch request (15 seconds)
     const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), 10000);
+    const id = setTimeout(() => controller.abort(), 15000);
 
+    // Mimic standard browser headers
     const response = await fetch(url, { 
       signal: controller.signal,
       cache: 'no-cache',
       headers: {
-        'Accept': 'text/html,application/xhtml+xml,application/xml'
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+        'Cache-Control': 'no-cache',
+        'Upgrade-Insecure-Requests': '1'
       }
     });
     
@@ -40,13 +44,15 @@ async function scrapeAndParse(url, selector) {
     const parser = new DOMParser();
     const doc = parser.parseFromString(htmlString, 'text/html');
     
+    const pageTitle = doc.title || 'No Title';
+
     // Find element
     const element = doc.querySelector(selector);
     
     if (!element) {
-      // Element not found - Return empty result so background knows
-      // Note: We don't throw error here to distinguish between "Network Error" and "Selector Error"
-      return { text: '', href: undefined };
+      // Return empty text but include pageTitle for debugging in background.js
+      // This helps users know if they are on the right page or blocked (e.g., "403 Forbidden", "Login")
+      return { text: '', href: undefined, pageTitle };
     }
 
     // Extract Text (normalize whitespace)
@@ -74,13 +80,12 @@ async function scrapeAndParse(url, selector) {
       }
     }
 
-    return { text, href };
+    return { text, href, pageTitle };
 
   } catch (error) {
     if (error.name === 'AbortError') {
-      throw new Error('Request timed out (10s)');
+      throw new Error('Request timed out (15s)');
     }
-    // Network errors (CORS, offline) usually appear here
     console.error(`[Offscreen] Fetch failed for ${url}:`, error);
     throw new Error(error.message || 'Network/CORS Error');
   }

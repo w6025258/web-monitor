@@ -16,7 +16,7 @@ chrome.runtime.onInstalled.addListener(async () => {
   console.log("[Web Monitor] ✅ 插件已安装，系统就绪。");
   chrome.alarms.create(ALARM_NAME, { periodInMinutes: 60 });
   
-  // Initial check (will likely be empty, but good for verification)
+  // Initial check
   await checkAllTasks();
 });
 
@@ -24,7 +24,6 @@ chrome.runtime.onInstalled.addListener(async () => {
 let creatingOffscreen; 
 
 async function setupOffscreenDocument(path) {
-  // Check if offscreen document exists
   if (chrome.runtime.getContexts) {
     const contexts = await chrome.runtime.getContexts({
       contextTypes: ['OFFSCREEN_DOCUMENT'],
@@ -32,12 +31,10 @@ async function setupOffscreenDocument(path) {
     });
     if (contexts.length > 0) return;
   } else {
-    // Fallback for older Chrome
     const clients = await self.clients.matchAll();
     if (clients.some(c => c.url === chrome.runtime.getURL(path))) return;
   }
 
-  // Create if not exists (singleton pattern)
   if (creatingOffscreen) {
     await creatingOffscreen;
   } else {
@@ -64,7 +61,6 @@ async function sendMessageToOffscreen(message) {
   return new Promise((resolve) => {
     chrome.runtime.sendMessage(message, (response) => {
       if (chrome.runtime.lastError) {
-        // If message fails, return error object
         resolve({ error: chrome.runtime.lastError.message });
       } else {
         resolve(response);
@@ -75,7 +71,6 @@ async function sendMessageToOffscreen(message) {
 
 // 3. Core Logic
 async function checkAllTasks() {
-  // Set "Checking" state for UI spinner
   await chrome.storage.local.set({ isChecking: true });
   
   try {
@@ -96,7 +91,6 @@ async function checkAllTasks() {
       try {
         console.log(`[Web Monitor] 抓取中: ${task.url}`);
         
-        // Send to offscreen for Fetch + Parse
         const result = await sendMessageToOffscreen({
           type: 'SCRAPE_URL',
           payload: { url: task.url, selector: task.selector }
@@ -106,15 +100,16 @@ async function checkAllTasks() {
 
         const currentContent = result.text || '';
         
-        // If content is empty, the selector might be wrong or site blocked the fetch
+        // Debugging Aid: If content is empty, log the page title
         if (!currentContent) {
-           console.warn(`[Web Monitor] ⚠️ 警告: 未找到内容 "${task.name}". 请检查选择器: ${task.selector}`);
+           console.warn(`[Web Monitor] ⚠️ 警告: 未找到内容 "${task.name}"`);
+           console.warn(`   └─ 目标页面标题: "${result.pageTitle}" (如果标题是 Login/Forbidden，说明被拦截)`);
+           console.warn(`   └─ 当前选择器: ${task.selector}`);
+           console.warn(`   └─ 建议: 右键网页 -> "查看网页源代码"，确认该元素是否存在于原始 HTML 中，并简化选择器。`);
         }
 
         const contentHash = await generateHash(currentContent);
         
-        // Detect Change
-        // Rule: Must have content, hash must differ, and not be empty (failed fetch)
         const isFirstRun = task.lastContentHash === '';
         const hasChanged = currentContent.length > 0 && task.lastContentHash !== contentHash;
         
@@ -139,8 +134,8 @@ async function checkAllTasks() {
         return {
           ...task,
           lastChecked: Date.now(),
-          lastContentHash: currentContent.length > 0 ? contentHash : task.lastContentHash, // Don't update hash if fetch failed
-          lastResult: currentContent.substring(0, 50), // Debug info
+          lastContentHash: currentContent.length > 0 ? contentHash : task.lastContentHash,
+          lastResult: currentContent.substring(0, 50),
           status: 'active',
           errorMessage: undefined
         };
@@ -155,7 +150,6 @@ async function checkAllTasks() {
       }
     }));
 
-    // Save results
     await chrome.storage.local.set({ tasks: updatedTasks, announcements, isChecking: false });
     
     if (hasNewUpdates) {
@@ -169,7 +163,6 @@ async function checkAllTasks() {
   }
 }
 
-// Helpers
 function generateId() {
   return Date.now().toString(36) + Math.random().toString(36).substr(2);
 }
@@ -181,11 +174,20 @@ async function generateHash(str) {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-// Message Listener from Popup
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.action === 'TRIGGER_CHECK') {
     console.log("[Web Monitor] 👆 收到手动触发检查请求");
     checkAllTasks().then(() => sendResponse({ status: 'done' }));
-    return true; // Keep channel open for async response
+    return true; 
+  }
+  
+  // NEW: Handle ad-hoc test scraping from popup
+  if (msg.action === 'TEST_SCRAPE') {
+    console.log("[Web Monitor] 🧪 测试抓取:", msg.payload.url);
+    sendMessageToOffscreen({
+      type: 'SCRAPE_URL',
+      payload: msg.payload
+    }).then(result => sendResponse(result));
+    return true; // async response
   }
 });
