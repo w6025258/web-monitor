@@ -14,10 +14,28 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 
 chrome.runtime.onInstalled.addListener(async () => {
   console.log("[Web Monitor] ✅ 插件已安装，系统就绪。");
-  chrome.alarms.create(ALARM_NAME, { periodInMinutes: 60 });
+  
+  // Load interval from storage or default to 60
+  const data = await chrome.storage.local.get('checkInterval');
+  const interval = parseInt(data.checkInterval) || 60;
+  
+  console.log(`[Web Monitor] 设置初始检查频率: ${interval} 分钟`);
+  chrome.alarms.create(ALARM_NAME, { periodInMinutes: interval });
   
   // Initial check
   await checkAllTasks();
+});
+
+// Watch for interval changes
+chrome.storage.onChanged.addListener(async (changes) => {
+  if (changes.checkInterval) {
+    const newInterval = parseInt(changes.checkInterval.newValue) || 60;
+    console.log(`[Web Monitor] ⏱️ 更新检查频率: ${newInterval} 分钟`);
+    
+    // Reset alarm
+    await chrome.alarms.clear(ALARM_NAME);
+    chrome.alarms.create(ALARM_NAME, { periodInMinutes: newInterval });
+  }
 });
 
 // 2. Offscreen Document Management (For Static Sites)

@@ -28,6 +28,9 @@ const btnExport = document.getElementById('btn-export');
 const btnImport = document.getElementById('btn-import');
 const fileInputImport = document.getElementById('file-input-import');
 
+// Settings Elements
+const selectInterval = document.getElementById('select-interval');
+
 // Test Selector Elements
 const btnTestSelector = document.getElementById('btn-test-selector');
 const previewContainer = document.getElementById('preview-container');
@@ -46,10 +49,16 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function loadData() {
-  chrome.storage.local.get(['tasks', 'announcements', 'isChecking'], (result) => {
+  chrome.storage.local.get(['tasks', 'announcements', 'isChecking', 'checkInterval'], (result) => {
     tasks = result.tasks || [];
     announcements = result.announcements || [];
     isChecking = result.isChecking || false;
+    
+    // Set Interval Selector
+    if (selectInterval) {
+      selectInterval.value = result.checkInterval || 60;
+    }
+
     render();
   });
 
@@ -58,6 +67,7 @@ function loadData() {
     if (changes.tasks) tasks = changes.tasks.newValue || [];
     if (changes.announcements) announcements = changes.announcements.newValue || [];
     if (changes.isChecking) isChecking = changes.isChecking.newValue || false;
+    if (changes.checkInterval && selectInterval) selectInterval.value = changes.checkInterval.newValue || 60;
     render();
   });
 }
@@ -72,6 +82,14 @@ btnSettings.addEventListener('click', () => {
     switchView('settings');
   }
 });
+
+// Interval Change
+if (selectInterval) {
+  selectInterval.addEventListener('change', (e) => {
+     const val = parseInt(e.target.value);
+     chrome.storage.local.set({ checkInterval: val });
+  });
+}
 
 // Navigation
 btnAddTaskView.addEventListener('click', () => {

@@ -19,8 +19,8 @@
     * { box-sizing: border-box; }
 
     body {
-      width: 380px;
-      height: 550px;
+      width: 780px; /* Modified: Widened to support grid layout */
+      height: 600px;
       margin: 0;
       font-family: "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       background-color: var(--bg);
@@ -77,30 +77,63 @@
       border: 1px solid var(--border);
       border-radius: 8px;
       padding: 12px;
-      margin-bottom: 10px;
       box-shadow: 0 1px 2px rgba(0,0,0,0.05);
     }
 
-    .announcement-item { border-left: 3px solid transparent; }
-    .announcement-item.unread { border-left-color: var(--primary); background-color: #ffffff; }
-    .announcement-item.read { opacity: 0.7; background-color: #f8fafc; }
+    /* --- Dashboard Grid Layout --- */
+    #announcements-list {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr); /* 5 items per row */
+      gap: 10px;
+    }
 
-    .meta { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); margin-bottom: 6px; border-bottom: 1px solid #f1f5f9; padding-bottom: 4px; }
-    .task-tag { background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-weight: 500; }
+    .announcement-item { 
+      border-top: 3px solid transparent; /* Changed from left border to top for grid look */
+      border-left: 1px solid var(--border);
+      height: 200px; /* Fixed height for grid alignment */
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      margin-bottom: 0;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .announcement-item:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+    }
+    .announcement-item.unread { border-top-color: var(--primary); background-color: #ffffff; }
+    .announcement-item.read { opacity: 0.8; background-color: #f8fafc; }
+
+    .meta { display: flex; justify-content: space-between; font-size: 10px; color: var(--text-muted); margin-bottom: 6px; border-bottom: 1px solid #f1f5f9; padding-bottom: 4px; }
+    .task-tag { background: #f1f5f9; padding: 2px 4px; border-radius: 4px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60px; }
     
     /* HTML Content Styling within Announcements */
     .html-content {
-      font-size: 13px;
+      font-size: 12px;
       color: var(--text);
-      line-height: 1.5;
+      line-height: 1.4;
+      flex: 1;
+      overflow: hidden;
+      word-break: break-all;
+      /* Fade out effect at bottom */
+      mask-image: linear-gradient(to bottom, black 70%, transparent 100%);
+      -webkit-mask-image: linear-gradient(to bottom, black 70%, transparent 100%);
     }
-    .html-content a { color: var(--primary); text-decoration: none; }
+    
+    /* Ensure images in grid don't break layout */
+    .html-content img { 
+      width: 100%; 
+      height: 80px; 
+      object-fit: cover; 
+      border-radius: 4px; 
+      margin-bottom: 4px;
+      display: block;
+    }
+    
+    .html-content a { color: var(--primary); text-decoration: none; font-weight: 500; }
     .html-content a:hover { text-decoration: underline; }
-    .html-content ul, .html-content ol { margin: 4px 0 4px 20px; padding: 0; }
-    .html-content li { margin-bottom: 4px; }
-    .html-content p { margin: 0 0 8px 0; }
-    .html-content img { max-width: 100%; height: auto; border-radius: 4px; }
-    .html-content h1, .html-content h2, .html-content h3 { font-size: 14px; font-weight: 700; margin: 8px 0 4px 0; }
+    .html-content p { margin: 0 0 4px 0; }
+    .html-content h1, .html-content h2 { font-size: 13px; margin: 4px 0; }
     
     .btn-action {
       font-size: 10px;
@@ -111,10 +144,22 @@
       border: none;
       cursor: pointer;
       padding: 0;
+      white-space: nowrap;
     }
 
-    /* Settings List */
-    .task-item { display: flex; justify-content: space-between; align-items: center; }
+    /* --- Settings List Grid --- */
+    #tasks-list {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr); /* 2 items per row for settings */
+      gap: 10px;
+    }
+
+    .task-item { 
+      display: flex; 
+      justify-content: space-between; 
+      align-items: center; 
+      margin-bottom: 0;
+    }
     .task-info { flex: 1; min-width: 0; margin-right: 10px; }
     .task-name { font-weight: 500; font-size: 13px; margin: 0 0 2px 0; display: flex; align-items: center; gap: 6px; }
     .task-url { font-size: 11px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -167,7 +212,7 @@
     .flex-row { display: flex; gap: 8px; }
 
     /* Empty States */
-    .empty-state { text-align: center; padding: 40px 20px; color: var(--text-muted); font-size: 13px; }
+    .empty-state { text-align: center; padding: 40px 20px; color: var(--text-muted); font-size: 13px; grid-column: 1 / -1; }
     .empty-icon { width: 40px; height: 40px; color: #cbd5e1; margin-bottom: 10px; }
 
     /* Footer */
@@ -271,10 +316,25 @@
     <!-- SETTINGS -->
     <div id="view-settings" class="view-section">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-        <h2 style="margin:0; font-size:14px; font-weight:600;">监控列表</h2>
+        <h2 style="margin:0; font-size:14px; font-weight:600;">监控管理</h2>
         <button id="btn-add-task-view" class="btn-primary" style="width:auto; padding: 6px 12px; font-size:12px;">+ 添加</button>
       </div>
+      
+      <!-- Global Interval Settings -->
+      <div class="card" style="display:flex; justify-content:space-between; align-items:center; padding: 10px 12px;">
+         <span style="font-size:12px; font-weight:500; display:flex; align-items:center; gap:6px;">
+           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;color:var(--text-muted);"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+           自动检查频率
+         </span>
+         <select id="select-interval" style="font-size:12px; padding:4px 8px; border:1px solid var(--border); border-radius:4px; outline:none; background-color: white; cursor:pointer;">
+           <option value="60">每 1 小时</option>
+           <option value="360">每 6 小时</option>
+           <option value="720">每 12 小时</option>
+           <option value="1440">每 24 小时</option>
+         </select>
+      </div>
 
+      <h3 style="margin:16px 0 8px 0; font-size:12px; font-weight:600; color:var(--text-muted);">监控列表</h3>
       <div id="tasks-list"></div>
 
       <div id="empty-state-settings" class="empty-state hidden">
