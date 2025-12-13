@@ -47,6 +47,7 @@ const statUnread = document.getElementById('stat-unread');
 document.addEventListener('DOMContentLoaded', () => {
   console.log("Popup Loaded");
   loadData();
+  setupEventListeners();
 });
 
 function loadData() {
@@ -57,7 +58,6 @@ function loadData() {
     
     // Set Interval Selector
     if (selectInterval) {
-      // Use !== undefined check because '0' is falsy but valid
       const currentInterval = result.checkInterval !== undefined ? result.checkInterval : 60;
       selectInterval.value = currentInterval;
     }
@@ -71,11 +71,42 @@ function loadData() {
     if (changes.announcements) announcements = changes.announcements.newValue || [];
     if (changes.isChecking) isChecking = changes.isChecking.newValue || false;
     if (changes.checkInterval && selectInterval) {
-       // Handle 0 value update correctly
        const newVal = changes.checkInterval.newValue;
        selectInterval.value = (newVal !== undefined) ? newVal : 60;
     }
     render();
+  });
+}
+
+// --- Event Listeners Setup (Event Delegation) ---
+function setupEventListeners() {
+  // 1. Task List Actions (Move, Edit, Delete)
+  listTasks.addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+
+    const action = btn.dataset.action;
+    const id = btn.dataset.id;
+
+    if (!action || !id) return;
+
+    e.stopPropagation(); // Stop propagation just in case
+
+    if (action === 'move-up') moveTask(id, -1);
+    else if (action === 'move-down') moveTask(id, 1);
+    else if (action === 'edit') editTask(id);
+    else if (action === 'delete') deleteTask(id);
+  });
+
+  // 2. Announcements List Actions (Mark Read / Open Link)
+  listAnnouncements.addEventListener('click', (e) => {
+    const card = e.target.closest('.announcement-item');
+    if (!card) return;
+
+    const id = card.dataset.id;
+    const link = card.dataset.link;
+
+    if (id) markRead(id, link);
   });
 }
 
@@ -124,7 +155,6 @@ function resetPreview() {
 btnCheckNow.addEventListener('click', () => {
   if (isChecking) return;
   btnCheckNow.classList.add('spin');
-  // Send message to background
   chrome.runtime.sendMessage({ action: 'TRIGGER_CHECK' });
 });
 
@@ -138,7 +168,6 @@ btnTestSelector.addEventListener('click', async () => {
     return;
   }
 
-  // UI Loading
   const originalBtnText = btnTestSelector.textContent;
   btnTestSelector.textContent = '...';
   btnTestSelector.disabled = true;
@@ -149,13 +178,11 @@ btnTestSelector.addEventListener('click', async () => {
   previewStatus.textContent = '';
 
   try {
-    // Send message to background to perform ad-hoc scrape
     const response = await chrome.runtime.sendMessage({
       action: 'TEST_SCRAPE',
       payload: { url, selector }
     });
 
-    // Handle Response
     btnTestSelector.textContent = originalBtnText;
     btnTestSelector.disabled = false;
 
@@ -168,7 +195,6 @@ btnTestSelector.addEventListener('click', async () => {
       previewResult.style.color = '#f59e0b';
       previewStatus.textContent = '⚠️ 无结果';
     } else {
-      // Use text for simple preview check, or slice HTML if it's too long
       previewResult.textContent = response.text || (response.html.substring(0, 300) + '...');
       previewResult.style.color = 'var(--text)';
       previewStatus.textContent = '✅ 成功匹配';
@@ -191,15 +217,12 @@ btnClearAll.addEventListener('click', () => {
 });
 
 // --- Data Management (Export/Import) ---
-
-// Export
 btnExport.addEventListener('click', () => {
   if (tasks.length === 0) {
     alert('暂无配置可导出');
     return;
   }
   
-  // Clean data for export (remove internal state if needed, but keeping basic fields is fine)
   const exportData = tasks.map(t => ({
     name: t.name,
     url: t.url,
@@ -218,12 +241,10 @@ btnExport.addEventListener('click', () => {
   URL.revokeObjectURL(url);
 });
 
-// Import Click Trigger
 btnImport.addEventListener('click', () => {
   fileInputImport.click();
 });
 
-// Import File Handler
 fileInputImport.addEventListener('change', (e) => {
   const file = e.target.files[0];
   if (!file) return;
@@ -232,7 +253,6 @@ fileInputImport.addEventListener('change', (e) => {
   reader.onload = (event) => {
     try {
       const importedData = JSON.parse(event.target.result);
-      
       if (!Array.isArray(importedData)) {
         throw new Error('无效的文件格式: 根元素应为数组');
       }
@@ -243,7 +263,7 @@ fileInputImport.addEventListener('change', (e) => {
       importedData.forEach(item => {
         if (item.name && item.url && item.selector) {
           newTasks.push({
-            id: Date.now().toString(36) + Math.random().toString(36).substr(2), // Generate new ID
+            id: Date.now().toString(36) + Math.random().toString(36).substr(2),
             name: item.name,
             url: item.url,
             selector: item.selector,
@@ -256,7 +276,7 @@ fileInputImport.addEventListener('change', (e) => {
       });
 
       if (count === 0) {
-        alert('未找到有效的监控配置。请检查文件格式。');
+        alert('未找到有效的监控配置。');
         return;
       }
 
@@ -264,7 +284,7 @@ fileInputImport.addEventListener('change', (e) => {
          const combinedTasks = [...tasks, ...newTasks];
          chrome.storage.local.set({ tasks: combinedTasks }, () => {
             alert('导入成功！');
-            fileInputImport.value = ''; // Reset input
+            fileInputImport.value = '';
          });
       }
 
@@ -284,90 +304,104 @@ formAddTask.addEventListener('submit', (e) => {
   const selector = document.getElementById('input-selector').value.trim();
 
   if (name && url && selector) {
-    
-    // Helper to finish up
     const finish = () => {
       formAddTask.reset();
       resetPreview();
       editingTaskId = null;
       switchView('settings');
-      // Use setTimeOut to ensure UI update logic doesn't block message sending
       setTimeout(() => {
           chrome.runtime.sendMessage({ action: 'TRIGGER_CHECK' });
       }, 100);
     };
 
     if (editingTaskId) {
-      // --- Update Existing Task ---
       const oldTaskIndex = tasks.findIndex(t => t.id === editingTaskId);
       if (oldTaskIndex > -1) {
         const oldTask = tasks[oldTaskIndex];
-        
-        // Check if critical fields changed to reset hash
         const isCriticalChange = oldTask.url !== url || oldTask.selector !== selector;
-        
         const updatedTask = {
           ...oldTask,
           name,
           url,
           selector,
-          // If URL or Selector changed, reset hash so we get a fresh baseline next check
           lastContentHash: isCriticalChange ? '' : oldTask.lastContentHash,
-          status: 'active', // Reset error status on edit
+          status: 'active',
           errorMessage: undefined
         };
-        
         const newTasks = [...tasks];
         newTasks[oldTaskIndex] = updatedTask;
-        
-        // Wait for storage set to complete before triggering check
         chrome.storage.local.set({ tasks: newTasks }, finish);
       } else {
         finish();
       }
     } else {
-      // --- Create New Task ---
       const newTask = {
         id: Date.now().toString(36) + Math.random().toString(36).substr(2),
         name,
         url,
         selector,
         lastChecked: 0,
-        lastContentHash: '', // Empty means first run establishes baseline
+        lastContentHash: '',
         status: 'active'
       };
-      
       const updatedTasks = [...tasks, newTask];
-      
-      // Wait for storage set to complete before triggering check
       chrome.storage.local.set({ tasks: updatedTasks }, finish);
     }
   }
 });
 
-// --- Logic for Moving Tasks ---
-window.moveTask = function(id, direction) {
+// --- Logic Functions (Not global anymore, called by Event Listeners) ---
+
+function moveTask(id, direction) {
   const index = tasks.findIndex(t => t.id === id);
   if (index === -1) return;
 
   const newTasks = [...tasks];
 
+  // Logic: 1 = Down (Next), -1 = Up (Prev)
   if (direction === -1 && index > 0) {
-    // Swap with previous
     [newTasks[index], newTasks[index - 1]] = [newTasks[index - 1], newTasks[index]];
   } else if (direction === 1 && index < newTasks.length - 1) {
-    // Swap with next
     [newTasks[index], newTasks[index + 1]] = [newTasks[index + 1], newTasks[index]];
   } else {
-    return; // Cannot move
+    return;
   }
 
-  // Optimistically update local state for snappiness, though storage listener will correct it
-  tasks = newTasks; 
-  render(); // Re-render immediately
-  
+  tasks = newTasks; // Optimistic update
+  render();
   chrome.storage.local.set({ tasks: newTasks });
-};
+}
+
+function deleteTask(id) {
+  if (confirm('确定要删除这个监控任务吗？')) {
+    const newTasks = tasks.filter(t => t.id !== id);
+    chrome.storage.local.set({ tasks: newTasks });
+  }
+}
+
+function editTask(id) {
+  const task = tasks.find(t => t.id === id);
+  if (task) {
+    editingTaskId = id;
+    document.getElementById('input-name').value = task.name;
+    document.getElementById('input-url').value = task.url;
+    document.getElementById('input-selector').value = task.selector;
+    
+    viewAddTaskTitle.textContent = "编辑监控";
+    switchView('addTask');
+  }
+}
+
+function markRead(id, link) {
+  const item = announcements.find(a => a.id === id);
+  if (item && !item.isRead) {
+    item.isRead = true;
+    chrome.storage.local.set({ announcements });
+  }
+  if (link && link !== 'undefined') {
+    chrome.tabs.create({ url: link });
+  }
+}
 
 // --- Rendering ---
 
@@ -413,28 +447,22 @@ function render() {
     document.getElementById('empty-state-no-tasks').classList.add('hidden');
     btnClearAll.classList.remove('hidden');
     
-    // Sort logic: 
-    // 1. Task Order (Index in tasks array)
-    // 2. Time (Descending)
-    
-    // Create a map for O(1) task index lookup
     const taskOrderMap = new Map();
     tasks.forEach((t, i) => taskOrderMap.set(t.id, i));
     
-    // Defensive copy for sorting
     const sortedAnnouncements = [...announcements].sort((a, b) => {
-      // Get index, default to infinity if task deleted
       const idxA = taskOrderMap.has(a.taskId) ? taskOrderMap.get(a.taskId) : 99999;
       const idxB = taskOrderMap.has(b.taskId) ? taskOrderMap.get(b.taskId) : 99999;
       
       if (idxA !== idxB) {
-        return idxA - idxB; // Sort by task order ascending
+        return idxA - idxB;
       }
-      return b.foundAt - a.foundAt; // Sort by time descending within same task
+      return b.foundAt - a.foundAt;
     });
 
+    // IMPORTANT: removed onclick, added data-id and data-link for Event Delegation
     listAnnouncements.innerHTML = sortedAnnouncements.map(item => `
-      <div class="announcement-item ${item.isRead ? 'read' : 'unread'} card" onclick="markRead('${item.id}', '${item.link}')">
+      <div class="announcement-item ${item.isRead ? 'read' : 'unread'} card" data-id="${item.id}" data-link="${item.link}">
         <div class="meta">
            <div class="task-tag">${escapeHtml(item.taskName)}</div>
            <span>${new Date(item.foundAt).toLocaleString('zh-CN', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'})}</span>
@@ -456,10 +484,10 @@ function render() {
       else if (task.lastChecked > 0) statusDot = `<span class="text-green">● 正常</span>`;
       else statusDot = `<span style="color:#cbd5e1;">● 未检测</span>`;
 
-      // Determine button disabled states
       const disableUp = index === 0 ? 'disabled' : '';
       const disableDown = index === tasks.length - 1 ? 'disabled' : '';
 
+      // IMPORTANT: removed onclick, added data-action and data-id for Event Delegation
       return `
       <div class="task-item card">
         <div class="task-info">
@@ -473,55 +501,23 @@ function render() {
           </div>
         </div>
         <div class="action-group">
-          <button class="task-btn move-btn" title="上移" onclick="moveTask('${task.id}', -1)" ${disableUp}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
+          <button class="task-btn move-btn" title="上移" data-action="move-up" data-id="${task.id}" ${disableUp}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;pointer-events:none;"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
           </button>
-          <button class="task-btn move-btn" title="下移" onclick="moveTask('${task.id}', 1)" ${disableDown}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg>
+          <button class="task-btn move-btn" title="下移" data-action="move-down" data-id="${task.id}" ${disableDown}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;pointer-events:none;"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg>
           </button>
           <div style="width:1px; height:16px; background:#e2e8f0; margin:0 4px;"></div>
-          <button class="task-btn edit-btn" title="编辑" onclick="editTask('${task.id}')">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+          <button class="task-btn edit-btn" title="编辑" data-action="edit" data-id="${task.id}">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;pointer-events:none;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
           </button>
-          <button class="task-btn delete-btn" title="删除" onclick="deleteTask('${task.id}')">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+          <button class="task-btn delete-btn" title="删除" data-action="delete" data-id="${task.id}">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;pointer-events:none;"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
           </button>
         </div>
       </div>
     `;
     }).join('');
-  }
-}
-
-// Global functions for inline onclick handlers
-window.markRead = function(id, link) {
-  const item = announcements.find(a => a.id === id);
-  if (item && !item.isRead) {
-    item.isRead = true;
-    chrome.storage.local.set({ announcements });
-  }
-  if (link) {
-    chrome.tabs.create({ url: link });
-  }
-};
-
-window.deleteTask = function(id) {
-  if (confirm('确定要删除这个监控任务吗？')) {
-    const newTasks = tasks.filter(t => t.id !== id);
-    chrome.storage.local.set({ tasks: newTasks });
-  }
-};
-
-window.editTask = function(id) {
-  const task = tasks.find(t => t.id === id);
-  if (task) {
-    editingTaskId = id;
-    document.getElementById('input-name').value = task.name;
-    document.getElementById('input-url').value = task.url;
-    document.getElementById('input-selector').value = task.selector;
-    
-    viewAddTaskTitle.textContent = "编辑监控";
-    switchView('addTask');
   }
 }
 
