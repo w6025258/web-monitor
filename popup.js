@@ -154,6 +154,8 @@ function resetPreview() {
 // Manual Check
 btnCheckNow.addEventListener('click', () => {
   if (isChecking) return;
+  // Change: Switch to dashboard immediately when clicked
+  switchView('dashboard');
   btnCheckNow.classList.add('spin');
   chrome.runtime.sendMessage({ action: 'TRIGGER_CHECK' });
 });
@@ -309,9 +311,7 @@ formAddTask.addEventListener('submit', (e) => {
       resetPreview();
       editingTaskId = null;
       switchView('settings');
-      setTimeout(() => {
-          chrome.runtime.sendMessage({ action: 'TRIGGER_CHECK' });
-      }, 100);
+      // Change: Removed auto TRIGGER_CHECK here.
     };
 
     if (editingTaskId) {
