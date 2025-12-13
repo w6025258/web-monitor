@@ -86,8 +86,8 @@
     /* --- Dashboard Grid Layout --- */
     #announcements-list {
       display: grid;
-      /* Modified: Changed to 4 columns to fit the narrower 780px body width nicely */
-      grid-template-columns: repeat(4, 1fr);
+      /* Modified: Changed to 3 columns for better spacing (requested update) */
+      grid-template-columns: repeat(3, 1fr);
       gap: 10px;
     }
 
@@ -150,7 +150,8 @@
     /* --- Settings List Grid --- */
     #tasks-list {
       display: grid;
-      grid-template-columns: repeat(2, 1fr); 
+      /* Modified: Changed to 1 column (1fr) to show full details (requested update) */
+      grid-template-columns: 1fr; 
       gap: 10px;
     }
 
