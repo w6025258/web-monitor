@@ -1,4 +1,5 @@
 
+
 // popup.js - Pure JS Interface (Chinese Version)
 
 // State
@@ -344,6 +345,30 @@ formAddTask.addEventListener('submit', (e) => {
   }
 });
 
+// --- Logic for Moving Tasks ---
+window.moveTask = function(id, direction) {
+  const index = tasks.findIndex(t => t.id === id);
+  if (index === -1) return;
+
+  const newTasks = [...tasks];
+
+  if (direction === -1 && index > 0) {
+    // Swap with previous
+    [newTasks[index], newTasks[index - 1]] = [newTasks[index - 1], newTasks[index]];
+  } else if (direction === 1 && index < newTasks.length - 1) {
+    // Swap with next
+    [newTasks[index], newTasks[index + 1]] = [newTasks[index + 1], newTasks[index]];
+  } else {
+    return; // Cannot move
+  }
+
+  // Optimistically update local state for snappiness, though storage listener will correct it
+  tasks = newTasks; 
+  render(); // Re-render immediately
+  
+  chrome.storage.local.set({ tasks: newTasks });
+};
+
 // --- Rendering ---
 
 function switchView(name) {
@@ -370,179 +395,142 @@ function render() {
   const unreadCount = announcements.filter(a => !a.isRead).length;
   statUnread.textContent = `未读: ${unreadCount}`;
 
-  // 3. Render Dashboard
-  renderDashboard();
-
-  // 4. Render Settings
-  renderSettings();
-}
-
-function renderDashboard() {
-  listAnnouncements.innerHTML = '';
-  
-  const emptyDash = document.getElementById('empty-state-dashboard');
-  const emptyTasks = document.getElementById('empty-state-no-tasks');
-
-  // Case: No tasks configured
-  if (tasks.length === 0) {
-    emptyTasks.classList.remove('hidden');
-    emptyDash.classList.add('hidden');
-    listAnnouncements.classList.add('hidden');
-    btnClearAll.classList.add('hidden');
-    return;
-  }
-  
-  emptyTasks.classList.add('hidden');
-  
-  // Case: No updates found yet
+  // 3. Render Announcements (Dashboard)
   if (announcements.length === 0) {
-    emptyDash.classList.remove('hidden');
-    listAnnouncements.classList.add('hidden');
+    listAnnouncements.innerHTML = '';
+    
+    if (tasks.length === 0) {
+        document.getElementById('empty-state-dashboard').classList.add('hidden');
+        document.getElementById('empty-state-no-tasks').classList.remove('hidden');
+    } else {
+        document.getElementById('empty-state-no-tasks').classList.add('hidden');
+        document.getElementById('empty-state-dashboard').classList.remove('hidden');
+    }
+    
     btnClearAll.classList.add('hidden');
-    return;
-  }
-
-  // Case: Updates exist
-  emptyDash.classList.add('hidden');
-  listAnnouncements.classList.remove('hidden');
-  btnClearAll.classList.remove('hidden');
-
-  announcements.forEach(item => {
-    const div = document.createElement('div');
-    div.className = `card announcement-item ${item.isRead ? 'read' : 'unread'}`;
+  } else {
+    document.getElementById('empty-state-dashboard').classList.add('hidden');
+    document.getElementById('empty-state-no-tasks').classList.add('hidden');
+    btnClearAll.classList.remove('hidden');
     
-    const time = new Date(item.foundAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    // Sort logic: 
+    // 1. Task Order (Index in tasks array)
+    // 2. Time (Descending)
     
-    // Use HTML rendering instead of text
-    // Note: 'item.title' now actually contains the HTML string from background.js
-    div.innerHTML = `
-      <div class="meta">
-        <span class="task-tag">${escapeHtml(item.taskName)}</span>
-        <div style="display:flex; gap:8px;">
-          <span>${time}</span>
-          ${!item.isRead ? `<button class="btn-action">已读</button>` : ''}
-        </div>
-      </div>
-      <div class="html-content">
-        ${item.title} 
-      </div>
-    `;
+    // Create a map for O(1) task index lookup
+    const taskOrderMap = new Map();
+    tasks.forEach((t, i) => taskOrderMap.set(t.id, i));
     
-    // Note: We are relying on the backend (offscreen.js) to have stripped scripts
-    // But for extra safety in the popup context, we could run a pass here, 
-    // but innerHTML assignments in Extensions are generally safer than eval.
-    // However, clicking links inside the HTML needs to work.
-
-    // Event Handlers
-    const btn = div.querySelector('.btn-action');
-    
-    const handleRead = () => {
-      const currentAnnouncements = announcements.map(a => 
-        a.id === item.id ? { ...a, isRead: true } : a
-      );
+    // Defensive copy for sorting
+    const sortedAnnouncements = [...announcements].sort((a, b) => {
+      // Get index, default to infinity if task deleted
+      const idxA = taskOrderMap.has(a.taskId) ? taskOrderMap.get(a.taskId) : 99999;
+      const idxB = taskOrderMap.has(b.taskId) ? taskOrderMap.get(b.taskId) : 99999;
       
-      chrome.storage.local.set({ announcements: currentAnnouncements });
-      const count = currentAnnouncements.filter(a => !a.isRead).length;
-      if (count === 0) chrome.action.setBadgeText({ text: '' });
-    };
-
-    if(btn) btn.onclick = handleRead;
-    
-    // Make main clicks (if it was a simple link) mark as read? 
-    // Since it's HTML content now, user might click links inside.
-    // Let's attach a listener to any link inside to mark as read
-    div.querySelectorAll('a').forEach(a => {
-        a.addEventListener('click', handleRead);
+      if (idxA !== idxB) {
+        return idxA - idxB; // Sort by task order ascending
+      }
+      return b.foundAt - a.foundAt; // Sort by time descending within same task
     });
 
-    listAnnouncements.appendChild(div);
-  });
-}
-
-function renderSettings() {
-  listTasks.innerHTML = '';
-  const empty = document.getElementById('empty-state-settings');
-
-  if (tasks.length === 0) {
-    empty.classList.remove('hidden');
-    listTasks.classList.add('hidden');
-    return;
+    listAnnouncements.innerHTML = sortedAnnouncements.map(item => `
+      <div class="announcement-item ${item.isRead ? 'read' : 'unread'} card" onclick="markRead('${item.id}', '${item.link}')">
+        <div class="meta">
+           <div class="task-tag">${escapeHtml(item.taskName)}</div>
+           <span>${new Date(item.foundAt).toLocaleString('zh-CN', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'})}</span>
+        </div>
+        <div class="html-content">${item.title}</div> 
+      </div>
+    `).join('');
   }
 
-  empty.classList.add('hidden');
-  listTasks.classList.remove('hidden');
+  // 4. Render Tasks (Settings)
+  if (tasks.length === 0) {
+    listTasks.innerHTML = '';
+    document.getElementById('empty-state-settings').classList.remove('hidden');
+  } else {
+    document.getElementById('empty-state-settings').classList.add('hidden');
+    listTasks.innerHTML = tasks.map((task, index) => {
+      let statusDot = '';
+      if (task.status === 'error') statusDot = `<span style="color:#ef4444;" title="${escapeHtml(task.errorMessage)}">● 错误</span>`;
+      else if (task.lastChecked > 0) statusDot = `<span class="text-green">● 正常</span>`;
+      else statusDot = `<span style="color:#cbd5e1;">● 未检测</span>`;
 
-  tasks.forEach(task => {
-    const div = document.createElement('div');
-    div.className = 'card task-item';
-    
-    let statusHtml = '<span class="text-green">● 正常</span>';
-    if (task.status === 'error') {
-      statusHtml = `<span class="text-red" title="${escapeHtml(task.errorMessage)}">● 错误</span>`;
-    }
+      // Determine button disabled states
+      const disableUp = index === 0 ? 'disabled' : '';
+      const disableDown = index === tasks.length - 1 ? 'disabled' : '';
 
-    const lastResultPreview = task.lastResult ? 
-      `<div style="font-size:10px; color:#94a3b8; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">最新抓取: ${escapeHtml(task.lastResult)}</div>` 
-      : '';
-
-    div.innerHTML = `
-      <div class="task-info">
-        <div class="task-name">${escapeHtml(task.name)}</div>
-        <div class="task-url" title="${escapeHtml(task.url)}">${escapeHtml(task.url)}</div>
-        ${lastResultPreview}
-        <div style="margin-top:4px; display:flex; justify-content:space-between; align-items:center;">
-           <span class="task-selector">${escapeHtml(task.selector)}</span>
-           <span style="font-size:10px;">${statusHtml}</span>
+      return `
+      <div class="task-item card">
+        <div class="task-info">
+          <div class="task-name">
+             ${escapeHtml(task.name)} 
+             <span style="font-size:10px; font-weight:400; margin-left:8px;">${statusDot}</span>
+          </div>
+          <div class="task-url" title="${escapeHtml(task.url)}">${escapeHtml(task.url)}</div>
+          <div style="margin-top:4px; display:flex; gap:6px; align-items:center;">
+             <span class="task-selector" title="Selector">${escapeHtml(task.selector)}</span>
+          </div>
+        </div>
+        <div class="action-group">
+          <button class="task-btn move-btn" title="上移" onclick="moveTask('${task.id}', -1)" ${disableUp}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
+          </button>
+          <button class="task-btn move-btn" title="下移" onclick="moveTask('${task.id}', 1)" ${disableDown}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg>
+          </button>
+          <div style="width:1px; height:16px; background:#e2e8f0; margin:0 4px;"></div>
+          <button class="task-btn edit-btn" title="编辑" onclick="editTask('${task.id}')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+          </button>
+          <button class="task-btn delete-btn" title="删除" onclick="deleteTask('${task.id}')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+          </button>
         </div>
       </div>
-      <div class="action-group">
-        <button class="task-btn edit-btn" title="编辑">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-        </button>
-        <button class="task-btn delete-btn" title="删除">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-        </button>
-      </div>
     `;
-
-    // Delete Action
-    div.querySelector('.delete-btn').onclick = () => {
-      if(confirm(`确定要删除监控 "${task.name}" 吗？`)) {
-        const newTasks = tasks.filter(t => t.id !== task.id);
-        chrome.storage.local.set({ tasks: newTasks });
-      }
-    };
-
-    // Edit Action
-    div.querySelector('.edit-btn').onclick = () => {
-      startEditing(task);
-    };
-
-    listTasks.appendChild(div);
-  });
+    }).join('');
+  }
 }
 
-function startEditing(task) {
-  editingTaskId = task.id;
-  
-  // Pre-fill form
-  document.getElementById('input-name').value = task.name;
-  document.getElementById('input-url').value = task.url;
-  document.getElementById('input-selector').value = task.selector;
-  
-  resetPreview();
+// Global functions for inline onclick handlers
+window.markRead = function(id, link) {
+  const item = announcements.find(a => a.id === id);
+  if (item && !item.isRead) {
+    item.isRead = true;
+    chrome.storage.local.set({ announcements });
+  }
+  if (link) {
+    chrome.tabs.create({ url: link });
+  }
+};
 
-  // Change Title
-  viewAddTaskTitle.textContent = "编辑监控任务";
-  
-  switchView('addTask');
+window.deleteTask = function(id) {
+  if (confirm('确定要删除这个监控任务吗？')) {
+    const newTasks = tasks.filter(t => t.id !== id);
+    chrome.storage.local.set({ tasks: newTasks });
+  }
+};
+
+window.editTask = function(id) {
+  const task = tasks.find(t => t.id === id);
+  if (task) {
+    editingTaskId = id;
+    document.getElementById('input-name').value = task.name;
+    document.getElementById('input-url').value = task.url;
+    document.getElementById('input-selector').value = task.selector;
+    
+    viewAddTaskTitle.textContent = "编辑监控";
+    switchView('addTask');
+  }
 }
 
-function escapeHtml(str) {
-  if (!str) return '';
-  return str.replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;")
-            .replace(/"/g, "&#039;");
+function escapeHtml(text) {
+  if (!text) return '';
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
