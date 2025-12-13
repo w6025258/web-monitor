@@ -1,4 +1,5 @@
 
+
 // popup.js - Pure JS Interface (Chinese Version)
 
 // State
@@ -409,22 +410,19 @@ function renderDashboard() {
 
   announcements.forEach(item => {
     const div = document.createElement('div');
-    div.className = `card announcement-item ${item.isRead ? 'read' : 'unread'}`;
+    div.className = `announcement-item ${item.isRead ? 'read' : 'unread'}`;
     
-    const time = new Date(item.foundAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    const time = new Date(item.foundAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', month: 'numeric', day: 'numeric'});
     
-    // Use HTML rendering instead of text
-    // Note: 'item.title' now actually contains the HTML string from background.js
+    // Updated HTML structure for List View
     div.innerHTML = `
       <div class="meta">
-        <span class="task-tag">${escapeHtml(item.taskName)}</span>
-        <div style="display:flex; gap:8px;">
-          <span>${time}</span>
-          ${!item.isRead ? `<button class="btn-action">已读</button>` : ''}
-        </div>
+        <div class="task-name" title="${escapeHtml(item.taskName)}">${escapeHtml(item.taskName)}</div>
+        <div class="time-info">${time}</div>
       </div>
-      <div class="html-content">
-        ${item.title} 
+      <div class="content-wrapper">
+         <div class="html-content">${item.title}</div>
+         ${!item.isRead ? `<div class="action-footer"><button class="btn-action">标记已读</button></div>` : ''}
       </div>
     `;
     
