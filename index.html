@@ -108,8 +108,26 @@
     .announcement-item.unread { border-top-color: var(--primary); background-color: #ffffff; }
     .announcement-item.read { opacity: 0.8; background-color: #f8fafc; }
 
-    .meta { display: flex; justify-content: space-between; font-size: 10px; color: var(--text-muted); margin-bottom: 6px; border-bottom: 1px solid #f1f5f9; padding-bottom: 4px; }
-    .task-tag { background: #f1f5f9; padding: 2px 4px; border-radius: 4px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60px; }
+    .meta { 
+      display: flex; 
+      justify-content: space-between; 
+      align-items: center; /* Added for vertical center alignment */
+      font-size: 10px; 
+      color: var(--text-muted); 
+      margin-bottom: 6px; 
+      border-bottom: 1px solid #f1f5f9; 
+      padding-bottom: 4px; 
+    }
+    
+    .task-tag { 
+      color: #dc2626; /* Changed to Red */
+      font-size: 14px; /* Increased Size */
+      font-weight: 700; /* Bold */
+      white-space: nowrap; 
+      overflow: hidden; 
+      text-overflow: ellipsis; 
+      max-width: 150px; /* Increased Width */
+    }
     
     /* HTML Content Styling within Announcements */
     .html-content {
