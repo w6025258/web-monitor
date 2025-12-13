@@ -83,69 +83,132 @@
       box-shadow: 0 1px 2px rgba(0,0,0,0.05);
     }
 
-    /* --- Dashboard Grid Layout --- */
+    /* --- Dashboard List Layout (Updated) --- */
     #announcements-list {
-      display: grid;
-      /* Modified: Changed to 3 columns for better spacing (requested update) */
-      grid-template-columns: repeat(3, 1fr);
-      gap: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden; /* Ensure rounded corners for list items */
     }
 
     .announcement-item { 
-      border-top: 3px solid transparent; 
-      border-left: 1px solid var(--border);
-      /* Fixed height 400px */
-      height: 400px;
+      border-top: none; 
+      border-left: none;
+      border-right: none;
+      border-bottom: 1px solid #f1f5f9;
+      height: auto;
       display: flex;
-      flex-direction: column;
-      overflow: hidden;
-      margin-bottom: 0;
-      transition: transform 0.2s, box-shadow 0.2s;
+      flex-direction: row; /* Horizontal layout for row */
+      align-items: flex-start;
+      padding: 12px 16px;
+      margin: 0;
+      gap: 16px;
+      position: relative;
+      transition: background-color 0.1s;
     }
-    .announcement-item:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-    }
-    .announcement-item.unread { border-top-color: var(--primary); background-color: #ffffff; }
-    .announcement-item.read { opacity: 0.8; background-color: #f8fafc; }
-
-    .meta { display: flex; justify-content: space-between; font-size: 10px; color: var(--text-muted); margin-bottom: 6px; border-bottom: 1px solid #f1f5f9; padding-bottom: 4px; }
-    .task-tag { background: #f1f5f9; padding: 2px 4px; border-radius: 4px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60px; }
     
-    /* HTML Content Styling within Announcements */
+    .announcement-item:last-child {
+        border-bottom: none;
+    }
+
+    .announcement-item:hover {
+      background-color: #f8fafc;
+    }
+    
+    /* Unread Indicator */
+    .announcement-item.unread { 
+       background-color: #fff;
+    }
+    .announcement-item.unread::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 3px;
+        background-color: var(--primary);
+    }
+    
+    /* Left Column: Meta Info */
+    .meta { 
+        display: flex; 
+        flex-direction: column; 
+        width: 140px; 
+        flex-shrink: 0;
+        gap: 6px;
+    }
+
+    /* 
+       Updated Task Name Style 
+       - Red (#ef4444)
+       - Bold (800)
+       - Larger (15px)
+    */
+    .task-name {
+        font-size: 15px; 
+        font-weight: 800; 
+        color: #ef4444; 
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .time-info {
+        font-size: 11px;
+        color: var(--text-muted);
+    }
+    
+    /* Right Column: Content */
+    .content-wrapper {
+        flex: 1;
+        min-width: 0; /* Enable truncation */
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
     .html-content {
-      font-size: 12px;
+      font-size: 13px;
       color: var(--text);
-      line-height: 1.4;
-      flex: 1;
+      line-height: 1.5;
       overflow: hidden;
       word-break: break-all;
-      /* Fade out effect at bottom */
-      mask-image: linear-gradient(to bottom, black 85%, transparent 100%);
-      -webkit-mask-image: linear-gradient(to bottom, black 85%, transparent 100%);
+      /* Clamp lines to keep list compact */
+      display: -webkit-box;
+      -webkit-line-clamp: 4; /* Show up to 4 lines */
+      -webkit-box-orient: vertical;
     }
     
-    /* Ensure images in grid don't break layout and are HIDDEN as requested */
+    /* Hide images in list view */
     .html-content img { 
-      display: none !important; /* Modified: Do not display images */
+      display: none !important; 
     }
     
     .html-content a { color: var(--primary); text-decoration: none; font-weight: 500; }
     .html-content a:hover { text-decoration: underline; }
     .html-content p { margin: 0 0 4px 0; }
-    .html-content h1, .html-content h2 { font-size: 13px; margin: 4px 0; }
+    .html-content h1, .html-content h2 { font-size: 13px; margin: 4px 0; font-weight: 700; }
+    
+    .action-footer {
+        display: flex;
+        justify-content: flex-end;
+    }
     
     .btn-action {
-      font-size: 10px;
-      text-transform: uppercase;
-      font-weight: 700;
+      font-size: 11px;
+      font-weight: 500;
       color: var(--primary);
-      background: none;
+      background: #eef2ff;
       border: none;
+      border-radius: 4px;
       cursor: pointer;
-      padding: 0;
+      padding: 2px 8px;
       white-space: nowrap;
     }
+    .btn-action:hover { background: #e0e7ff; }
 
     /* --- Settings List Grid --- */
     #tasks-list {
@@ -162,7 +225,25 @@
       margin-bottom: 0;
     }
     .task-info { flex: 1; min-width: 0; margin-right: 10px; }
-    .task-name { font-weight: 500; font-size: 13px; margin: 0 0 2px 0; display: flex; align-items: center; gap: 6px; }
+    
+    /* Specific override for Dashboard list to ensure RED/BOLD/LARGE applies there */
+    #announcements-list .task-name {
+        font-size: 15px;
+        font-weight: 800;
+        color: #ef4444;
+    }
+
+    /* Reset for Settings list to be normal */
+    #tasks-list .task-name {
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--text);
+        margin: 0 0 2px 0;
+        display: flex; 
+        align-items: center; 
+        gap: 6px;
+    }
+
     .task-url { font-size: 11px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .task-selector { font-family: monospace; font-size: 10px; background: #f1f5f9; padding: 2px 4px; border-radius: 3px; color: #475569; }
 
@@ -286,7 +367,7 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
       </button>
       <button id="btn-settings" class="icon-btn" title="设置 / 列表">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
       </button>
     </div>
   </header>
