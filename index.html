@@ -123,7 +123,15 @@
       white-space: nowrap; 
       overflow: hidden; 
       text-overflow: ellipsis; 
-      max-width: 150px; 
+      max-width: 150px;
+      cursor: pointer; /* Change cursor to pointer */
+      transition: color 0.2s;
+    }
+    
+    /* Add hover effect for task tag */
+    .task-tag:hover {
+      text-decoration: underline;
+      color: var(--primary);
     }
     
     /* HTML Content Styling within Announcements */

@@ -100,6 +100,15 @@ function setupEventListeners() {
 
   // 2. Announcements List Actions (Mark Read / Open Link)
   listAnnouncements.addEventListener('click', (e) => {
+    // Check if the user clicked the Task Tag (Strategy Name)
+    const taskTag = e.target.closest('.task-tag');
+    if (taskTag && taskTag.dataset.taskUrl) {
+      e.stopPropagation(); // Prevent the card's main click event
+      chrome.tabs.create({ url: taskTag.dataset.taskUrl });
+      return;
+    }
+
+    // Default card action
     const card = e.target.closest('.announcement-item');
     if (!card) return;
 
@@ -460,16 +469,20 @@ function render() {
       return b.foundAt - a.foundAt;
     });
 
-    // IMPORTANT: removed onclick, added data-id and data-link for Event Delegation
-    listAnnouncements.innerHTML = sortedAnnouncements.map(item => `
+    listAnnouncements.innerHTML = sortedAnnouncements.map(item => {
+      // Find parent task to get the URL
+      const task = tasks.find(t => t.id === item.taskId);
+      const taskUrl = task ? task.url : '';
+
+      return `
       <div class="announcement-item ${item.isRead ? 'read' : 'unread'} card" data-id="${item.id}" data-link="${item.link}">
         <div class="meta">
-           <div class="task-tag">${escapeHtml(item.taskName)}</div>
+           <div class="task-tag" data-task-url="${escapeHtml(taskUrl)}" title="跳转到监控页面">${escapeHtml(item.taskName)}</div>
            <span>${new Date(item.foundAt).toLocaleString('zh-CN', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'})}</span>
         </div>
         <div class="html-content">${item.title}</div> 
       </div>
-    `).join('');
+    `}).join('');
   }
 
   // 4. Render Tasks (Settings)
@@ -487,7 +500,6 @@ function render() {
       const disableUp = index === 0 ? 'disabled' : '';
       const disableDown = index === tasks.length - 1 ? 'disabled' : '';
 
-      // IMPORTANT: removed onclick, added data-action and data-id for Event Delegation
       return `
       <div class="task-item card">
         <div class="task-info">
