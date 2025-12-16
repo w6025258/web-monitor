@@ -1,1 +1,0 @@
-// This file is no longer used. The active background script is background.js.

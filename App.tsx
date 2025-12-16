@@ -1,1 +1,0 @@
-// This file is no longer used. The application uses index.html and popup.js directly.
