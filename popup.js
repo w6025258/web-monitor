@@ -2,9 +2,12 @@
 
 // popup.js - Pure JS Interface (Chinese Version)
 
+// Import shared utilities
+import { escapeHtml } from './utils.js';
+
 // State
-let tasks = [];
-let announcements = [];
+let tasks = new Map(); // Use Map for O(1) lookups
+let announcements = new Map(); // Use Map for O(1) lookups
 let isChecking = false;
 let editingTaskId = null; // Track if we are editing an existing task
 
@@ -52,8 +55,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function loadData() {
   chrome.storage.local.get(['tasks', 'announcements', 'isChecking', 'checkInterval'], (result) => {
-    tasks = result.tasks || [];
-    announcements = result.announcements || [];
+    // Convert tasks array to Map
+    const tasksArray = result.tasks || [];
+    tasks = new Map(tasksArray.map(task => [task.id, task]));
+    
+    // Convert announcements array to Map
+    const announcementsArray = result.announcements || [];
+    announcements = new Map(announcementsArray.map(announcement => [announcement.id, announcement]));
+    
     isChecking = result.isChecking || false;
     
     // Set Interval Selector
@@ -67,13 +76,23 @@ function loadData() {
 
   // Real-time updates from background
   chrome.storage.onChanged.addListener((changes) => {
-    if (changes.tasks) tasks = changes.tasks.newValue || [];
-    if (changes.announcements) announcements = changes.announcements.newValue || [];
+    if (changes.tasks) {
+      const tasksArray = changes.tasks.newValue || [];
+      tasks = new Map(tasksArray.map(task => [task.id, task]));
+    }
+    
+    if (changes.announcements) {
+      const announcementsArray = changes.announcements.newValue || [];
+      announcements = new Map(announcementsArray.map(announcement => [announcement.id, announcement]));
+    }
+    
     if (changes.isChecking) isChecking = changes.isChecking.newValue || false;
+    
     if (changes.checkInterval && selectInterval) {
        const newVal = changes.checkInterval.newValue;
        selectInterval.value = (newVal !== undefined) ? newVal : 60;
     }
+    
     render();
   });
 }
@@ -362,34 +381,37 @@ formAddTask.addEventListener('submit', (e) => {
 // --- Logic Functions (Not global anymore, called by Event Listeners) ---
 
 function moveTask(id, direction) {
-  const index = tasks.findIndex(t => t.id === id);
+  // Convert Map to array for reordering
+  const tasksArray = Array.from(tasks.values());
+  const index = tasksArray.findIndex(t => t.id === id);
+  
   if (index === -1) return;
 
-  const newTasks = [...tasks];
-
-  // Logic: 1 = Down (Next), -1 = Up (Prev)
+  // Perform the move operation
   if (direction === -1 && index > 0) {
-    [newTasks[index], newTasks[index - 1]] = [newTasks[index - 1], newTasks[index]];
-  } else if (direction === 1 && index < newTasks.length - 1) {
-    [newTasks[index], newTasks[index + 1]] = [newTasks[index + 1], newTasks[index]];
+    [tasksArray[index], tasksArray[index - 1]] = [tasksArray[index - 1], tasksArray[index]];
+  } else if (direction === 1 && index < tasksArray.length - 1) {
+    [tasksArray[index], tasksArray[index + 1]] = [tasksArray[index + 1], tasksArray[index]];
   } else {
     return;
   }
 
-  tasks = newTasks; // Optimistic update
+  // Update the Map with the new order
+  tasks = new Map(tasksArray.map(task => [task.id, task]));
+  
   render();
-  chrome.storage.local.set({ tasks: newTasks });
+  chrome.storage.local.set({ tasks: tasksArray });
 }
 
 function deleteTask(id) {
   if (confirm('确定要删除这个监控任务吗？')) {
-    const newTasks = tasks.filter(t => t.id !== id);
-    chrome.storage.local.set({ tasks: newTasks });
+    tasks.delete(id);
+    chrome.storage.local.set({ tasks: Array.from(tasks.values()) });
   }
 }
 
 function editTask(id) {
-  const task = tasks.find(t => t.id === id);
+  const task = tasks.get(id);
   if (task) {
     editingTaskId = id;
     document.getElementById('input-name').value = task.name;
@@ -402,10 +424,11 @@ function editTask(id) {
 }
 
 function markRead(id, link) {
-  const item = announcements.find(a => a.id === id);
+  const item = announcements.get(id);
   if (item && !item.isRead) {
     item.isRead = true;
-    chrome.storage.local.set({ announcements });
+    announcements.set(id, item);
+    chrome.storage.local.set({ announcements: Array.from(announcements.values()) });
   }
   if (link && link !== 'undefined') {
     chrome.tabs.create({ url: link });
@@ -425,6 +448,60 @@ function switchView(name) {
   }
 }
 
+// Helper function to render a single announcement item
+function renderAnnouncementItem(item, taskUrl) {
+  return `
+    <div class="announcement-item ${item.isRead ? 'read' : 'unread'} card" data-id="${item.id}" data-link="${item.link}">
+      <div class="meta">
+         <div class="task-tag" data-task-url="${escapeHtml(taskUrl)}" title="跳转到监控页面">${escapeHtml(item.taskName)}</div>
+         <span>${new Date(item.foundAt).toLocaleString('zh-CN', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'})}</span>
+      </div>
+      <div class="html-content">${item.title}</div> 
+    </div>
+  `;
+}
+
+// Helper function to render a single task item
+function renderTaskItem(task, index) {
+  let statusDot = '';
+  if (task.status === 'error') statusDot = `<span style="color:#ef4444;" title="${escapeHtml(task.errorMessage)}">● 错误</span>`;
+  else if (task.lastChecked > 0) statusDot = `<span class="text-green">● 正常</span>`;
+  else statusDot = `<span style="color:#cbd5e1;">● 未检测</span>`;
+
+  const disableUp = index === 0 ? 'disabled' : '';
+  const disableDown = index === tasks.length - 1 ? 'disabled' : '';
+
+  return `
+    <div class="task-item card" data-id="${task.id}">
+      <div class="task-info">
+        <div class="task-name">
+           ${escapeHtml(task.name)} 
+           <span style="font-size:10px; font-weight:400; margin-left:8px;">${statusDot}</span>
+        </div>
+        <div class="task-url" title="${escapeHtml(task.url)}">${escapeHtml(task.url)}</div>
+        <div style="margin-top:4px; display:flex; gap:6px; align-items:center;">
+           <span class="task-selector" title="Selector">${escapeHtml(task.selector)}</span>
+        </div>
+      </div>
+      <div class="action-group">
+        <button class="task-btn move-btn" title="上移" data-action="move-up" data-id="${task.id}" ${disableUp}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;pointer-events:none;"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
+        </button>
+        <button class="task-btn move-btn" title="下移" data-action="move-down" data-id="${task.id}" ${disableDown}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;pointer-events:none;"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg>
+        </button>
+        <div style="width:1px; height:16px; background:#e2e8f0; margin:0 4px;"></div>
+        <button class="task-btn edit-btn" title="编辑" data-action="edit" data-id="${task.id}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;pointer-events:none;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+        </button>
+        <button class="task-btn delete-btn" title="删除" data-action="delete" data-id="${task.id}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;pointer-events:none;"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+        </button>
+      </div>
+    </div>
+  `;
+}
+
 function render() {
   // 1. Update Spinner
   if (isChecking) {
@@ -433,16 +510,20 @@ function render() {
     btnCheckNow.classList.remove('spin');
   }
 
+  // Convert Map to array for rendering
+  const tasksArray = Array.from(tasks.values());
+  const announcementsArray = Array.from(announcements.values());
+
   // 2. Update Stats
-  statMonitored.textContent = `已监控: ${tasks.length}`;
-  const unreadCount = announcements.filter(a => !a.isRead).length;
+  statMonitored.textContent = `已监控: ${tasksArray.length}`;
+  const unreadCount = announcementsArray.filter(a => !a.isRead).length;
   statUnread.textContent = `未读: ${unreadCount}`;
 
-  // 3. Render Announcements (Dashboard)
-  if (announcements.length === 0) {
+  // 3. Render Announcements (Dashboard) with incremental updates
+  if (announcementsArray.length === 0) {
     listAnnouncements.innerHTML = '';
     
-    if (tasks.length === 0) {
+    if (tasksArray.length === 0) {
         document.getElementById('empty-state-dashboard').classList.add('hidden');
         document.getElementById('empty-state-no-tasks').classList.remove('hidden');
     } else {
@@ -457,9 +538,9 @@ function render() {
     btnClearAll.classList.remove('hidden');
     
     const taskOrderMap = new Map();
-    tasks.forEach((t, i) => taskOrderMap.set(t.id, i));
+    tasksArray.forEach((t, i) => taskOrderMap.set(t.id, i));
     
-    const sortedAnnouncements = [...announcements].sort((a, b) => {
+    const sortedAnnouncements = [...announcementsArray].sort((a, b) => {
       const idxA = taskOrderMap.has(a.taskId) ? taskOrderMap.get(a.taskId) : 99999;
       const idxB = taskOrderMap.has(b.taskId) ? taskOrderMap.get(b.taskId) : 99999;
       
@@ -469,76 +550,60 @@ function render() {
       return b.foundAt - a.foundAt;
     });
 
-    listAnnouncements.innerHTML = sortedAnnouncements.map(item => {
-      // Find parent task to get the URL
-      const task = tasks.find(t => t.id === item.taskId);
-      const taskUrl = task ? task.url : '';
+    // Check if we need to re-render announcements
+    const currentItems = Array.from(listAnnouncements.children);
+    let needsReRender = currentItems.length !== sortedAnnouncements.length;
+    
+    if (!needsReRender) {
+      // Check if any item has changed
+      for (let i = 0; i < currentItems.length; i++) {
+        const currentId = currentItems[i].dataset.id;
+        const newItem = sortedAnnouncements[i];
+        if (currentId !== newItem.id || 
+            currentItems[i].classList.contains('unread') !== !newItem.isRead) {
+          needsReRender = true;
+          break;
+        }
+      }
+    }
 
-      return `
-      <div class="announcement-item ${item.isRead ? 'read' : 'unread'} card" data-id="${item.id}" data-link="${item.link}">
-        <div class="meta">
-           <div class="task-tag" data-task-url="${escapeHtml(taskUrl)}" title="跳转到监控页面">${escapeHtml(item.taskName)}</div>
-           <span>${new Date(item.foundAt).toLocaleString('zh-CN', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'})}</span>
-        </div>
-        <div class="html-content">${item.title}</div> 
-      </div>
-    `}).join('');
+    if (needsReRender) {
+      // Render all announcements if there's a significant change
+      listAnnouncements.innerHTML = sortedAnnouncements.map(item => {
+        // Find parent task to get the URL
+        const task = tasks.get(item.taskId);
+        const taskUrl = task ? task.url : '';
+        return renderAnnouncementItem(item, taskUrl);
+      }).join('');
+    }
   }
 
-  // 4. Render Tasks (Settings)
-  if (tasks.length === 0) {
+  // 4. Render Tasks (Settings) with incremental updates
+  if (tasksArray.length === 0) {
     listTasks.innerHTML = '';
     document.getElementById('empty-state-settings').classList.remove('hidden');
   } else {
     document.getElementById('empty-state-settings').classList.add('hidden');
-    listTasks.innerHTML = tasks.map((task, index) => {
-      let statusDot = '';
-      if (task.status === 'error') statusDot = `<span style="color:#ef4444;" title="${escapeHtml(task.errorMessage)}">● 错误</span>`;
-      else if (task.lastChecked > 0) statusDot = `<span class="text-green">● 正常</span>`;
-      else statusDot = `<span style="color:#cbd5e1;">● 未检测</span>`;
+    
+    // Check if we need to re-render tasks
+    const currentItems = Array.from(listTasks.children);
+    let needsReRender = currentItems.length !== tasksArray.length;
+    
+    if (!needsReRender) {
+      // Check if any task has changed
+      for (let i = 0; i < currentItems.length; i++) {
+        const currentId = currentItems[i].dataset.id;
+        const newTask = tasksArray[i];
+        if (currentId !== newTask.id) {
+          needsReRender = true;
+          break;
+        }
+      }
+    }
 
-      const disableUp = index === 0 ? 'disabled' : '';
-      const disableDown = index === tasks.length - 1 ? 'disabled' : '';
-
-      return `
-      <div class="task-item card">
-        <div class="task-info">
-          <div class="task-name">
-             ${escapeHtml(task.name)} 
-             <span style="font-size:10px; font-weight:400; margin-left:8px;">${statusDot}</span>
-          </div>
-          <div class="task-url" title="${escapeHtml(task.url)}">${escapeHtml(task.url)}</div>
-          <div style="margin-top:4px; display:flex; gap:6px; align-items:center;">
-             <span class="task-selector" title="Selector">${escapeHtml(task.selector)}</span>
-          </div>
-        </div>
-        <div class="action-group">
-          <button class="task-btn move-btn" title="上移" data-action="move-up" data-id="${task.id}" ${disableUp}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;pointer-events:none;"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
-          </button>
-          <button class="task-btn move-btn" title="下移" data-action="move-down" data-id="${task.id}" ${disableDown}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;pointer-events:none;"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg>
-          </button>
-          <div style="width:1px; height:16px; background:#e2e8f0; margin:0 4px;"></div>
-          <button class="task-btn edit-btn" title="编辑" data-action="edit" data-id="${task.id}">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;pointer-events:none;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-          </button>
-          <button class="task-btn delete-btn" title="删除" data-action="delete" data-id="${task.id}">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;pointer-events:none;"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-          </button>
-        </div>
-      </div>
-    `;
-    }).join('');
+    if (needsReRender) {
+      // Render all tasks if there's a significant change
+      listTasks.innerHTML = tasksArray.map((task, index) => renderTaskItem(task, index)).join('');
+    }
   }
-}
-
-function escapeHtml(text) {
-  if (!text) return '';
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
 }

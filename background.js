@@ -1,6 +1,9 @@
 
+import { generateId, generateHash, withTimeout, promisePool } from './utils.js';
+
 const ALARM_NAME = 'monitor_check';
 const OFFSCREEN_DOCUMENT_PATH = 'offscreen.html';
+const MAX_CONCURRENT_TASKS = 3; // Limit concurrent tasks to 3
 
 console.log("[Web Monitor] 后台服务初始化中...");
 
@@ -200,7 +203,8 @@ async function checkAllTasks() {
 
     console.log(`[Web Monitor] 🔍 正在检查 ${tasks.length} 个任务...`);
 
-    const updatedTasks = await Promise.all(tasks.map(async (task) => {
+    // Create task functions array for promisePool
+    const taskFunctions = tasks.map(task => async () => {
       try {
         console.log(`[Web Monitor] 尝试抓取: ${task.url}`);
         
@@ -263,7 +267,10 @@ async function checkAllTasks() {
           errorMessage: e.message
         };
       }
-    }));
+    });
+
+    // Use promisePool to limit concurrent tasks
+    const updatedTasks = await promisePool(taskFunctions, MAX_CONCURRENT_TASKS);
 
     // Keep last 50
     if (announcements.length > 50) {
@@ -284,17 +291,6 @@ async function checkAllTasks() {
     console.error('[Web Monitor] 全局检查失败', err);
     await chrome.storage.local.set({ isChecking: false });
   }
-}
-
-function generateId() {
-  return Date.now().toString(36) + Math.random().toString(36).substr(2);
-}
-
-async function generateHash(str) {
-  const data = new TextEncoder().encode(str);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
