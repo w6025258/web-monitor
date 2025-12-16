@@ -1,4 +1,5 @@
 
+
 const ALARM_NAME = 'monitor_check';
 const OFFSCREEN_DOCUMENT_PATH = 'offscreen.html';
 
@@ -138,7 +139,15 @@ async function scrapeDynamicContent(url, selector) {
         // --- Same HTML Processing Logic as Offscreen (Simplified for content script) ---
         const base = new URL(document.location.href);
 
-        el.querySelectorAll('a').forEach(a => { a.target = "_blank"; a.href = a.href; }); // .href access resolves absolute
+        el.querySelectorAll('a').forEach(a => { 
+            // Security: Disable JS links
+            if (a.href.toLowerCase().startsWith('javascript:')) {
+                a.removeAttribute('href');
+            } else {
+                a.target = "_blank"; 
+                a.href = a.href; 
+            }
+        }); 
         el.querySelectorAll('img').forEach(img => { img.src = img.src; img.style.maxWidth = '100%'; });
         el.querySelectorAll('script, style, iframe, button').forEach(n => n.remove());
         
@@ -187,9 +196,9 @@ async function checkAllTasks() {
   await chrome.storage.local.set({ isChecking: true });
   
   try {
-    const data = await chrome.storage.local.get(['tasks']); // Don't get 'announcements', we will clear it
+    const data = await chrome.storage.local.get(['tasks', 'announcements']); 
     const tasks = data.tasks || [];
-    let announcements = []; // Clear history: Start with fresh array
+    let announcements = data.announcements || []; // Use existing announcements, don't clear them
     let hasNewUpdates = false;
 
     if (tasks.length === 0) {
@@ -225,31 +234,44 @@ async function checkAllTasks() {
             throw new Error("未找到匹配内容 (HTML Empty)");
         }
 
-        // Use text content for hash generation to detect meaningful changes, 
-        // but store HTML for display.
+        // Use text content for hash generation to detect meaningful changes
         const contentHash = await generateHash(result.text || result.html);
         
-        // 始终推送到“最新动态”列表 (Requested feature)
-        // Store HTML content in the 'title' field (or we could add a content field, but reusing title is easier for now)
-        // NOTE: We limit HTML length to 2000 chars to avoid storage quota issues, though local storage is 5MB.
-        const displayContent = result.html; 
-        
-        announcements.unshift({
-          id: generateId(),
-          taskId: task.id,
-          taskName: task.name,
-          title: displayContent, // We are storing HTML here now
-          link: result.href || task.url,
-          foundAt: Date.now(),
-          isRead: false,
-          isHtml: true // Flag to tell UI to render as HTML
-        });
-        hasNewUpdates = true;
+        // IMPORTANT: Logic Change - Only update if hash is different
+        // If lastContentHash is empty (new task), we save state but don't notify to avoid spam on creation
+        const isContentChanged = task.lastContentHash && task.lastContentHash !== contentHash;
+        const isNewTask = !task.lastContentHash;
+
+        if (isContentChanged || isNewTask) {
+             // For storage optimization, truncate HTML if it's too long (limit to ~2000 chars)
+             const displayContent = result.html.length > 2000 
+                ? result.html.substring(0, 2000) + '... (内容过长已截断)' 
+                : result.html;
+            
+             if (isContentChanged) {
+                console.log(`[Web Monitor] 📢 发现更新: ${task.name}`);
+                announcements.unshift({
+                    id: generateId(),
+                    taskId: task.id,
+                    taskName: task.name,
+                    title: displayContent,
+                    link: result.href || task.url,
+                    foundAt: Date.now(),
+                    isRead: false,
+                    isHtml: true 
+                });
+                hasNewUpdates = true;
+             } else {
+                 console.log(`[Web Monitor] 🆕 初始化任务状态: ${task.name}`);
+             }
+        } else {
+            console.log(`[Web Monitor] 💤 内容未变更: ${task.name}`);
+        }
 
         return {
           ...task,
           lastChecked: Date.now(),
-          lastContentHash: contentHash, 
+          lastContentHash: contentHash, // Always update hash
           lastResult: result.text.substring(0, 50) + "...", 
           status: 'active',
           errorMessage: undefined
@@ -275,10 +297,8 @@ async function checkAllTasks() {
     if (hasNewUpdates) {
       chrome.action.setBadgeText({ text: 'NEW' });
       chrome.action.setBadgeBackgroundColor({ color: '#ef4444' });
-    } else {
-      // Clear badge if we cleared history and found nothing new (though logically logic above adds everything)
-      chrome.action.setBadgeText({ text: '' }); 
     }
+    // Note: We do NOT clear the badge here if no updates, so the user sees "NEW" until they open the popup.
 
   } catch (err) {
     console.error('[Web Monitor] 全局检查失败', err);
