@@ -1,5 +1,4 @@
 
-
 console.log("[Offscreen] Loaded and ready to scrape");
 
 // Listen for messages from the background script
@@ -61,15 +60,8 @@ async function scrapeAndParse(url, selector) {
 
     element.querySelectorAll('a').forEach(a => {
       try {
-        // Security check: Remove javascript: links
-        const rawHref = a.getAttribute('href');
-        if (rawHref && rawHref.toLowerCase().trim().startsWith('javascript:')) {
-            a.removeAttribute('href');
-            return;
-        }
-
-        if (rawHref) {
-          a.href = new URL(rawHref, base).href;
+        if (a.getAttribute('href')) {
+          a.href = new URL(a.getAttribute('href'), base).href;
           a.target = "_blank"; // Force open in new tab
         }
       } catch(e) {}
@@ -85,7 +77,7 @@ async function scrapeAndParse(url, selector) {
     });
 
     // 2. Remove dangerous or noisy tags
-    element.querySelectorAll('script, style, iframe, frame, object, embed, form, button, input, textarea, select').forEach(el => el.remove());
+    element.querySelectorAll('script, style, iframe, frame, object, embed, form, button, input').forEach(el => el.remove());
     
     // 3. Remove inline event handlers (security) and classes (style isolation)
     const allElements = element.querySelectorAll('*');
@@ -103,7 +95,6 @@ async function scrapeAndParse(url, selector) {
     let cleanHtml = element.innerHTML.trim();
     
     // Also get text for summary/hash purposes
-    // Optimize: textContent is faster than innerText in offscreen/worker contexts
     const cleanText = element.textContent.trim().replace(/\s+/g, ' ');
 
     // Extract Link if available (Primary link for the card header)

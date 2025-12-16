@@ -1,0 +1,1 @@
+// This file is no longer used. The active offscreen script is offscreen.js.

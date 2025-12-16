@@ -1,0 +1,1 @@
+// This file is no longer used. The application uses JavaScript files directly.

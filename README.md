@@ -1,51 +1,20 @@
-# 平台公告订阅 (Web Monitor Extension)
+<div align="center">
+<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+</div>
 
-一个基于 Chrome Manifest V3 的网页内容监控插件。通过 CSS 选择器精准定位网页内容，支持静态页面和动态渲染页面，一旦内容发生变化即通过图标红点提醒。
+# Run and deploy your AI Studio app
 
-## 主要功能
+This contains everything you need to run your app locally.
 
-1.  **精准监控**：支持配置 CSS Selector，只监控网页的特定区域（如公告标题列表），避免无关内容干扰。
-2.  **双重抓取策略**：
-    *   **静态抓取**：利用 Offscreen Document 快速抓取标准 HTML 页面。
-    *   **动态抓取**：针对 SPA（单页应用）自动创建隐藏窗口渲染，抓取 JS 动态生成的内容。
-3.  **完全本地化**：所有配置和抓取数据仅存储在浏览器本地 (`chrome.storage`)，不上传任何服务器，保护隐私。
-4.  **历史记录**：保留最近 50 条更新记录，支持一键跳转。
+View your app in AI Studio: https://ai.studio/apps/drive/15foJFPffYEFtm6A--b1_ORlO8VynW4Yr
 
-## 安装说明
+## Run Locally
 
-1.  下载本项目源码。
-2.  打开 Chrome 浏览器，在地址栏输入 `chrome://extensions/` 并回车。
-3.  开启右上角的 **"开发者模式" (Developer mode)** 开关。
-4.  点击左上角的 **"加载已解压的扩展程序" (Load unpacked)**。
-5.  选择本项目所在的文件夹即可安装。
+**Prerequisites:**  Node.js
 
-## 使用指南
 
-### 1. 添加监控
-1.  点击浏览器右上角的插件图标打开面板。
-2.  点击 **"设置 / 列表"** 图标，然后点击 **"+ 添加"** 按钮。
-3.  **任务名称**：给自己看的备注（例如：OpenAI 博客）。
-4.  **目标链接**：需要监控的网页 URL。
-5.  **CSS 选择器**：
-    *   打开目标网页。
-    *   右键点击你想监控的文字或标题，选择 **"检查" (Inspect)**。
-    *   在开发者工具 Elements 面板中，右键高亮的 HTML 元素 -> **Copy** -> **Copy selector**。
-    *   粘贴到插件输入框中。
-6.  点击 **"测试"** 按钮，确认能否提取到有效内容。
-7.  点击 **"保存"**。
-
-### 2. 查看更新
-*   当插件图标出现 **"NEW"** 红底白字标记时，表示有内容更新。
-*   点击插件图标，在 **"最新动态"** 页面即可看到最新的变更记录。
-*   点击具体的动态条目或标题，可直接跳转到原始网页。
-
-### 3. 数据管理
-*   在设置页面底部，支持 **导出配置** 和 **导入配置** (JSON 格式)，方便备份或迁移监控列表。
-
-## 文件结构
-
-*   `manifest.json`: 扩展程序清单文件。
-*   `background.js`: 后台服务 Worker，核心逻辑控制器。
-*   `popup.js`: 插件弹窗的前端交互逻辑。
-*   `index.html`: 插件弹窗的 UI 布局。
-*   `offscreen.js`: 用于解析 HTML DOM 的辅助脚本。
+1. Install dependencies:
+   `npm install`
+2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+3. Run the app:
+   `npm run dev`
